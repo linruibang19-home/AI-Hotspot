@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI Hotspot 高保真产品原型：公开 AI 情报、事件、报告、RAG、邮件订阅、Agent 与管理工作区。" />
+  <title>AI Hotspot · AI 情报与知识研究</title>
+  <style>
+    :root {
+      --bg: #f4f6f7;
+      --surface: #ffffff;
+      --surface-2: #f8fafb;
+      --surface-3: #eef3f4;
+      --text: #14262d;
+      --muted: #74868e;
+      --subtle: #9aa8ae;
+      --border: #dde5e8;
+      --accent: #0b6c73;
+      --accent-2: #16868e;
+      --accent-soft: #e8f3f4;
+      --warning: #a56f23;
+      --warning-soft: #fff9ef;
+      --danger: #b65252;
+      --danger-soft: #fff2f2;
+      --success: #2c7a63;
+      --shadow: 0 1px 2px rgba(17, 38, 46, .04), 0 4px 14px rgba(17, 38, 46, .035);
+      --sidebar: 188px;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    html[data-theme="dark"] {
+      --bg: #11181b;
+      --surface: #182226;
+      --surface-2: #1d292e;
+      --surface-3: #243238;
+      --text: #e7eff1;
+      --muted: #9bb0b7;
+      --subtle: #728890;
+      --border: #2d3c42;
+      --accent: #54b3b8;
+      --accent-2: #7fcbd0;
+      --accent-soft: #20383b;
+      --warning-soft: #332b1f;
+      --danger-soft: #392425;
+      --shadow: none;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    a { color: inherit; text-decoration: none; }
+    .hidden { display: none !important; }
+    .muted { color: var(--muted); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+    .app { min-height: 100vh; }
+    .sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: var(--sidebar);
+      z-index: 40;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      transition: width .2s ease;
+    }
+    .brand {
+      height: 94px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 2px;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      border-top: 0;
+      border-left: 0;
+      border-right: 0;
+      letter-spacing: .18em;
+      font-weight: 760;
+      font-size: 18px;
+    }
+    .brand span:last-child { color: var(--accent); }
+    .brand-orbit {
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--accent);
+      border-radius: 50%;
+      display: inline-block;
+      position: relative;
+      margin: 0 2px;
+    }
+    .brand-orbit::after {
+      content: "";
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--accent);
+      right: -4px;
+      top: -3px;
+    }
+    .nav { flex: 1; overflow: auto; padding: 14px 10px; }
+    .nav-section { margin-bottom: 18px; }
+    .nav-label {
+      padding: 0 10px 7px;
+      font-size: 10px;
+      color: var(--subtle);
+      letter-spacing: .12em;
+    }
+    .nav-item {
+      width: 100%;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 10px;
+      color: var(--muted);
+      background: transparent;
+      text-align: left;
+      margin-bottom: 3px;
+      font-size: 13px;
+    }
+    .nav-item:hover { color: var(--text); background: var(--surface-2); }
+    .nav-item.active { color: var(--accent); background: var(--accent-soft); font-weight: 650; }
+    .nav-icon {
+      width: 18px;
+      height: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 18px;
+    }
+    .nav-icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .sidebar-bottom { border-top: 1px solid var(--border); padding: 10px; }
+    .theme-row { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 4px; background: var(--surface-3); border-radius: 10px; }
+    .theme-btn { border: 0; background: transparent; color: var(--muted); padding: 7px; border-radius: 7px; }
+    .theme-btn.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
+    .admin-switch { width: 100%; margin-top: 9px; border: 0; background: transparent; color: var(--muted); padding: 7px; font-size: 11px; }
+
+    .main { margin-left: var(--sidebar); min-height: 100vh; }
+    .page { display: none; }
+    .page.active { display: block; }
+    .page-shell { max-width: 1540px; margin: 0 auto; padding: 0 28px 60px; }
+    .page-header {
+      min-height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .page-header h1 { margin: 0 0 7px; font-size: 24px; letter-spacing: -.02em; }
+    .page-header p { margin: 0; color: var(--muted); font-size: 12px; }
+    .header-actions { display: flex; gap: 9px; align-items: center; }
+    .btn {
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 0 13px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+    .btn.primary:hover { background: var(--accent-2); color: white; }
+    .btn.danger { color: var(--danger); }
+    .btn.small { height: 29px; padding: 0 9px; font-size: 11px; }
+    .btn.icon { width: 36px; padding: 0; }
+    .icon-svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .tabs { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+    .tab {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 9px 10px;
+      border-bottom: 2px solid transparent;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 650; }
+    .search { margin-left: auto; position: relative; min-width: 290px; }
+    .search input {
+      width: 100%; height: 36px; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+      border-radius: 8px; padding: 0 39px 0 13px; outline: 0;
+    }
+    .search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .search button { position: absolute; right: 3px; top: 3px; width: 30px; height: 30px; border: 0; background: transparent; color: var(--muted); }
+
+    .hot-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 26px; overflow: hidden; }
+    .panel-title { height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-bottom: 1px solid var(--border); font-weight: 700; }
+    .panel-title small { color: var(--muted); font-weight: 400; }
+    .hot-row { width: 100%; min-height: 42px; display: grid; grid-template-columns: 26px 1fr 130px; align-items: center; gap: 8px; padding: 0 15px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--text); text-align: left; }
+    .hot-row:hover, .hot-row:focus-visible { background: var(--accent-soft); outline: none; }
+    .hot-row:first-of-type { border-top: 0; }
+    .hot-rank { color: #c56d2b; font-weight: 800; }
+    .hot-title { font-size: 13px; font-weight: 620; }
+    .hot-row small { color: var(--muted); text-align: right; }
+
+    .date-heading { margin: 20px 0 15px 5px; font-size: 17px; display: flex; gap: 9px; align-items: center; }
+    .date-heading small { font-size: 11px; color: var(--muted); font-weight: 400; }
+    .timeline { position: relative; }
+    .timeline::before { content: ""; position: absolute; left: 64px; top: 5px; bottom: 12px; width: 1px; background: var(--border); }
+    .timeline-row { display: grid; grid-template-columns: 64px 1fr; gap: 15px; margin-bottom: 12px; position: relative; }
+    .time-col { padding-top: 13px; text-align: right; color: #62767f; font-size: 10px; font-weight: 650; position: relative; }
+    .time-col::after { content: ""; position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); right: -19px; top: 17px; border: 3px solid var(--bg); }
+    .article-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 15px 16px 13px; position: relative; transition: transform .15s ease, border-color .15s ease; }
+    .article-card:hover { transform: translateY(-1px); border-color: #c4d7db; }
+    .article-top { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+    .source-dot { width: 26px; height: 26px; border-radius: 50%; background: var(--surface-3); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; }
+    .source-type { color: var(--subtle); }
+    .badge { display: inline-flex; align-items: center; border-radius: 5px; padding: 2px 6px; background: var(--warning-soft); color: var(--warning); font-size: 9px; font-weight: 650; }
+    .score { margin-left: auto; color: var(--accent); font-weight: 750; font-size: 10px; }
+    .bookmark { border: 0; background: transparent; color: var(--muted); width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; }
+    .bookmark.active { color: var(--accent); }
+    .article-title { margin: 11px 0 7px; font-size: 16px; line-height: 1.55; font-weight: 720; cursor: pointer; }
+    .article-title:hover { color: var(--accent); }
+    .article-summary { color: #596d75; line-height: 1.75; margin: 0; font-size: 12px; }
+    html[data-theme="dark"] .article-summary { color: #a9bbc1; }
+    .article-tags { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; color: var(--muted); font-size: 10px; }
+    .reason { border-top: 1px dashed var(--border); margin-top: 11px; padding-top: 9px; color: #557d83; font-size: 10px; line-height: 1.65; }
+    .reason strong { color: var(--accent); }
+
+    .filter-row { display: flex; align-items: center; gap: 8px; padding: 11px 13px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+    .filter-row label { color: var(--muted); font-size: 11px; }
+    .filter-row select { height: 31px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); padding: 0 28px 0 9px; }
+    .toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+    .toggle input { accent-color: var(--accent); }
+
+    .report-hero { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); display: grid; grid-template-columns: 1.4fr .6fr; gap: 28px; padding: 30px; box-shadow: var(--shadow); margin-bottom: 18px; }
+    .report-hero h2 { font-size: 27px; line-height: 1.45; margin: 0 0 10px; }
+    .report-hero p { color: var(--muted); line-height: 1.8; }
+    .report-metrics { border-left: 1px solid var(--border); padding-left: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-content: center; }
+    .metric { background: var(--surface-2); border-radius: 9px; padding: 13px; }
+    .metric strong { font-size: 22px; display: block; }
+    .metric span { color: var(--muted); font-size: 10px; }
+    .report-list { display: grid; gap: 10px; }
+    .report-row { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 15px 17px; display: grid; grid-template-columns: 90px 1fr 180px; gap: 15px; align-items: center; }
+    .report-row h3 { margin: 0; font-size: 14px; }
+    .report-row p { margin: 5px 0 0; color: var(--muted); font-size: 10px; }
+
+    .topic-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .topic-card { border: 1px solid var(--border); background: var(--surface); border-radius: 11px; padding: 17px; text-align: left; }
+    .topic-card:hover { border-color: var(--accent); }
+    .topic-card h3 { margin: 0 0 16px; font-size: 15px; }
+    .topic-stats { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; }
+    .topic-feature { margin-top: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; display: grid; grid-template-columns: 1.2fr .8fr; gap: 25px; }
+    .topic-feature h2 { margin: 0 0 7px; }
+    .topic-feature p { color: var(--muted); line-height: 1.8; }
+    .spark-bars { height: 150px; display: flex; align-items: end; gap: 6px; border-bottom: 1px solid var(--border); }
+    .spark-bars i { flex: 1; background: var(--accent); opacity: .72; border-radius: 3px 3px 0 0; }
+
+    .knowledge-shell { height: 100vh; display: grid; grid-template-rows: 96px 1fr; overflow: hidden; }
+    .knowledge-header { padding: 0 25px; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; justify-content: space-between; }
+    .knowledge-header h1 { margin: 0 0 5px; font-size: 22px; }
+    .knowledge-header p { margin: 0; color: var(--muted); font-size: 11px; }
+    .knowledge-layout { min-height: 0; display: grid; grid-template-columns: 230px minmax(420px, 1fr) 300px; }
+    .query-panel, .evidence-panel { background: var(--surface); overflow: auto; padding: 17px; }
+    .query-panel { border-right: 1px solid var(--border); }
+    .evidence-panel { border-left: 1px solid var(--border); }
+    .panel-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .panel-heading h3 { margin: 0; font-size: 13px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; color: var(--muted); font-size: 10px; margin-bottom: 6px; }
+    .form-group select, .form-group input { width: 100%; height: 35px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); padding: 0 9px; }
+    .check-list { display: grid; gap: 9px; color: var(--muted); font-size: 11px; }
+    .check-list input { accent-color: var(--accent); }
+    .chat-panel { min-width: 0; display: grid; grid-template-rows: 1fr auto; overflow: hidden; }
+    .chat-messages { overflow: auto; padding: 25px max(30px, 7vw); }
+    .chat-welcome { max-width: 650px; margin: 7vh auto 0; text-align: center; }
+    .chat-welcome .orb { width: 52px; height: 52px; margin: 0 auto 17px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); display: flex; align-items: center; justify-content: center; color: var(--accent); box-shadow: var(--shadow); font-size: 20px; }
+    .chat-welcome h2 { margin: 0 0 8px; font-size: 23px; }
+    .chat-welcome p { color: var(--muted); line-height: 1.8; }
+    .suggestions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 22px; }
+    .suggestion { text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: 9px; padding: 11px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .suggestion:hover { color: var(--accent); border-color: var(--accent); }
+    .message { max-width: 760px; margin: 0 auto 18px; }
+    .message.user { display: flex; justify-content: flex-end; }
+    .bubble { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; line-height: 1.8; box-shadow: var(--shadow); }
+    .message.user .bubble { background: var(--accent); color: white; border-color: var(--accent); max-width: 75%; }
+    .answer-title { font-weight: 750; margin-bottom: 8px; }
+    .citation-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-size: 9px; font-weight: 800; margin: 0 2px; }
+    .chat-compose { padding: 13px max(25px, 7vw) 20px; background: linear-gradient(to top, var(--bg) 74%, transparent); }
+    .compose-box { max-width: 850px; margin: 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: 13px; padding: 8px 8px 8px 14px; display: flex; align-items: end; gap: 8px; box-shadow: 0 8px 30px rgba(17,38,46,.08); }
+    .compose-box textarea { flex: 1; border: 0; outline: 0; resize: none; background: transparent; color: var(--text); min-height: 44px; max-height: 130px; padding: 10px 0; line-height: 1.55; }
+    .send-btn { width: 39px; height: 39px; border-radius: 9px; border: 0; background: var(--accent); color: white; }
+    .evidence-card { border: 1px solid var(--border); border-radius: 9px; padding: 11px; margin-bottom: 9px; background: var(--surface-2); }
+    .evidence-card strong { font-size: 11px; display: block; line-height: 1.45; }
+    .evidence-card p { margin: 7px 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+    .evidence-meta { display: flex; justify-content: space-between; color: var(--subtle); font-size: 9px; }
+    .retrieval-steps { border-top: 1px solid var(--border); margin-top: 15px; padding-top: 14px; }
+    .step { display: grid; grid-template-columns: 18px 1fr; gap: 8px; margin-bottom: 10px; font-size: 10px; color: var(--muted); }
+    .step i { width: 17px; height: 17px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-style: normal; display: flex; align-items: center; justify-content: center; font-size: 9px; }
+
+    .agent-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+    .agent-card { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 17px; }
+    .agent-card .agent-icon { width: 37px; height: 37px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; margin-bottom: 15px; font-weight: 800; }
+    .agent-card h3 { margin: 0 0 8px; }
+    .agent-card p { color: var(--muted); line-height: 1.7; font-size: 11px; min-height: 58px; }
+    .agent-card .btn { width: 100%; }
+    .run-table { margin-top: 18px; border: 1px solid var(--border); border-radius: 11px; overflow: hidden; background: var(--surface); }
+    .table-title { padding: 14px 15px; font-weight: 700; border-bottom: 1px solid var(--border); }
+    .run-row, .run-head { display: grid; grid-template-columns: minmax(190px,1.2fr) 100px 110px 85px 95px 45px; gap: 10px; align-items: center; padding: 0 14px; }
+    .run-head { height: 37px; background: var(--surface-2); color: var(--muted); font-size: 9px; }
+    .run-row { min-height: 55px; border-top: 1px solid var(--border); font-size: 10px; }
+    .status { display: inline-flex; align-items: center; gap: 5px; width: max-content; font-size: 9px; }
+    .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+    .status.warning::before { background: #c88a35; }
+    .status.error::before { background: var(--danger); }
+    .status.manual::before { background: #74868e; }
+
+    .admin-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; margin-bottom: 14px; }
+    .admin-metric { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+    .admin-metric strong { display: block; font-size: 22px; }
+    .admin-metric span { color: var(--muted); font-size: 10px; }
+    .admin-toolbar { display: flex; gap: 9px; align-items: center; margin-bottom: 12px; }
+    .admin-toolbar .search { margin-left: 0; min-width: 250px; flex: 1; }
+    .data-table { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; overflow: auto; }
+    .source-head, .source-row { min-width: 1050px; display: grid; grid-template-columns: minmax(220px,1.4fr) 95px 125px 90px 70px 75px 95px 85px; gap: 10px; align-items: center; padding: 0 14px; }
+    .source-head { height: 38px; background: var(--surface-2); color: var(--muted); font-size: 9px; }
+    .source-row { min-height: 61px; border-top: 1px solid var(--border); font-size: 10px; }
+    .source-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .source-logo { width: 32px; height: 32px; border-radius: 8px; background: var(--surface-3); color: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 800; }
+    .source-name strong, .source-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .source-name small { color: var(--muted); margin-top: 4px; }
+    code.tag-code { padding: 4px 6px; border-radius: 5px; background: var(--surface-3); color: #57787f; font-size: 9px; }
+    .chart-layout { display: grid; grid-template-columns: 1.4fr .6fr; gap: 12px; margin-bottom: 13px; }
+    .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 16px; }
+    .bar-chart { height: 190px; display: flex; align-items: end; gap: 7px; border-bottom: 1px solid var(--border); padding-top: 20px; }
+    .bar-chart i { flex: 1; background: var(--accent); opacity: .75; border-radius: 3px 3px 0 0; }
+    .health-line { display: grid; grid-template-columns: 95px 1fr 35px; gap: 8px; align-items: center; margin: 17px 0; color: var(--muted); font-size: 10px; }
+    .health-line div { height: 6px; background: var(--surface-3); border-radius: 3px; overflow: hidden; }
+    .health-line i { height: 100%; display: block; background: var(--accent); }
+    .job-head, .job-row { min-width: 900px; display: grid; grid-template-columns: 1.25fr 130px 90px 75px 70px 160px 35px; gap: 10px; align-items: center; padding: 0 14px; }
+    .job-head { height: 38px; background: var(--surface-2); color: var(--muted); font-size: 9px; }
+    .job-row { min-height: 53px; border-top: 1px solid var(--border); font-size: 10px; }
+    .review-layout { display: grid; grid-template-columns: 1.15fr .85fr; gap: 12px; }
+    .review-list, .review-detail { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; overflow: hidden; }
+    .review-item { width: 100%; text-align: left; padding: 14px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--text); }
+    .review-item:first-child { border-top: 0; }
+    .review-item.active, .review-item:hover { background: var(--surface-2); }
+    .review-item h3 { margin: 6px 0; font-size: 13px; }
+    .review-item p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.65; }
+    .review-detail { padding: 17px; }
+    .review-detail h2 { margin: 0 0 6px; font-size: 16px; }
+    .cluster-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-top: 8px; display: flex; gap: 9px; }
+    .cluster-card input { accent-color: var(--accent); }
+    .cluster-card strong { display: block; font-size: 11px; }
+    .cluster-card p { margin: 4px 0 0; color: var(--muted); font-size: 9px; }
+    .model-layout { display: grid; grid-template-columns: 1.2fr .8fr; gap: 12px; }
+    .model-list, .prompt-card { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 16px; }
+    .model-row { display: grid; grid-template-columns: 1fr 170px 80px; gap: 10px; padding: 13px 0; border-top: 1px solid var(--border); align-items: center; }
+    .model-row:first-of-type { border-top: 0; }
+    .model-row strong, .model-row small { display: block; }
+    .model-row small { color: var(--muted); margin-top: 4px; }
+    .prompt-card label { display: block; color: var(--muted); font-size: 10px; margin: 11px 0 6px; }
+    .prompt-card input, .prompt-card textarea, .prompt-card select { width: 100%; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 7px; padding: 9px; }
+    .prompt-card textarea { min-height: 155px; resize: vertical; line-height: 1.65; }
+
+    .detail-page { max-width: 900px; margin: 0 auto; padding: 20px 30px 80px; }
+    .back { border: 0; background: transparent; color: var(--muted); padding: 9px 0; }
+    .detail-meta { margin-top: 18px; display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; }
+    .detail-meta .score { margin-left: auto; }
+    .detail-page h1 { font-size: 32px; line-height: 1.45; margin: 20px 0 10px; letter-spacing: -.025em; }
+    .info-box { border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; background: var(--surface); margin: 17px 0; }
+    .info-box label { color: var(--accent); font-size: 10px; letter-spacing: .12em; }
+    .info-box p { font-size: 13px; line-height: 1.9; margin: 8px 0 0; }
+    .article-body { font-size: 15px; line-height: 2.05; margin-top: 28px; }
+    .article-body h2 { font-size: 19px; margin-top: 30px; }
+    .detail-tags { color: var(--muted); font-size: 11px; display: flex; gap: 13px; flex-wrap: wrap; margin: 25px 0; }
+
+    .modal-backdrop { position: fixed; inset: 0; z-index: 100; display: none; align-items: center; justify-content: center; padding: 20px; background: rgba(13,28,35,.44); }
+    .modal-backdrop.open { display: flex; }
+    .modal { width: min(620px, 100%); max-height: 90vh; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 25px 70px rgba(0,0,0,.22); padding: 20px; }
+    .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
+    .modal h2 { margin: 0 0 5px; font-size: 19px; }
+    .modal p { color: var(--muted); font-size: 11px; }
+    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal label { display: block; color: var(--muted); font-size: 10px; margin-bottom: 6px; }
+    .modal input, .modal select, .modal textarea { width: 100%; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 7px; padding: 9px; }
+    .probe-result { margin-top: 14px; border: 1px solid #cae0e2; background: var(--accent-soft); border-radius: 9px; padding: 12px; display: none; }
+    .probe-result.show { display: block; }
+    .probe-result strong { color: var(--accent); }
+    .probe-result ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 11px; line-height: 1.7; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    .toast { position: fixed; right: 22px; bottom: 22px; z-index: 150; background: var(--text); color: var(--surface); padding: 11px 14px; border-radius: 8px; font-size: 11px; transform: translateY(20px); opacity: 0; pointer-events: none; transition: .2s ease; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    @media (max-width: 1180px) {
+      .topic-grid, .agent-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .knowledge-layout { grid-template-columns: 205px 1fr; }
+      .evidence-panel { display: none; }
+      .admin-metrics { grid-template-columns: repeat(2,1fr); }
+      .chart-layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 760px) {
+      :root { --sidebar: 64px; }
+      .brand { justify-content: center; padding: 0; font-size: 0; }
+      .brand::before { content: "AI"; font-size: 17px; letter-spacing: .06em; }
+      .brand-orbit, .brand span { display: none; }
+      .nav-label, .nav-item span, .admin-switch, .sidebar-bottom .theme-row { display: none; }
+      .nav-item { justify-content: center; padding: 0; }
+      .page-shell { padding: 0 14px 40px; }
+      .page-header { min-height: 94px; }
+      .page-header h1 { font-size: 20px; }
+      .header-actions .btn:not(.primary) { display: none; }
+      .toolbar, .admin-toolbar { align-items: stretch; flex-direction: column; }
+      .search { min-width: 0; width: 100%; margin-left: 0; }
+      .hot-row { grid-template-columns: 24px 1fr; }
+      .hot-row small { display: none; }
+      .timeline::before { left: 17px; }
+      .timeline-row { grid-template-columns: 36px 1fr; gap: 8px; }
+      .time-col span { display: none; }
+      .time-col::after { right: 14px; }
+      .article-title { font-size: 14px; }
+      .report-hero, .topic-feature, .review-layout, .model-layout { grid-template-columns: 1fr; }
+      .report-metrics { border-left: 0; padding-left: 0; }
+      .report-row { grid-template-columns: 70px 1fr; }
+      .report-row > span:last-child { display: none; }
+      .topic-grid, .agent-grid, .admin-metrics { grid-template-columns: 1fr; }
+      .knowledge-layout { grid-template-columns: 1fr; }
+      .query-panel { display: none; }
+      .knowledge-header { padding: 0 14px; }
+      .chat-messages { padding: 18px 14px; }
+      .suggestions { grid-template-columns: 1fr; }
+      .chat-compose { padding: 10px 12px 16px; }
+      .run-row, .run-head { grid-template-columns: 1fr 90px 30px; }
+      .run-row > *:nth-child(3), .run-row > *:nth-child(4), .run-head > *:nth-child(3), .run-head > *:nth-child(4) { display: none; }
+      .review-detail, .prompt-card { display: none; }
+      .detail-page { padding: 15px 18px 60px; }
+      .detail-page h1 { font-size: 24px; }
+      .modal-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <button class="brand" data-route="featured" aria-label="返回精选页"><span>AI</span><i class="brand-orbit"></i><span>HOTSPOT</span></button>
+    <nav class="nav">
+      <section class="nav-section">
+        <div class="nav-label">内容</div>
+        <button class="nav-item active" data-route="featured"><span class="nav-icon">★</span><span>精选</span></button>
+        <button class="nav-item" data-route="all"><span class="nav-icon">≡</span><span>全部 AI 动态</span></button>
+        <button class="nav-item" data-route="reports"><span class="nav-icon">▤</span><span>AI 日报</span></button>
+        <button class="nav-item" data-route="topics"><span class="nav-icon">⌘</span><span>主题</span></button>
+        <button class="nav-item" data-route="favorites"><span class="nav-icon">♡</span><span>收藏</span></button>
+      </section>
+      <section class="nav-section">
+        <div class="nav-label">智能</div>
+        <button class="nav-item" data-route="subscriptions"><span class="nav-icon">✉</span><span>订阅与邮件</span></button>
+        <button class="nav-item" data-route="knowledge"><span class="nav-icon">◫</span><span>知识库问答</span></button>
+        <button class="nav-item" data-route="agent"><span class="nav-icon">◎</span><span>Agent 工作台</span></button>
+      </section>
+      <section class="nav-section">
+        <div class="nav-label">管理</div>
+        <button class="nav-item" data-route="admin-sources"><span class="nav-icon">⌁</span><span>信源管理</span></button>
+        <button class="nav-item" data-route="admin-crawls"><span class="nav-icon">◌</span><span>采集监控</span></button>
+        <button class="nav-item" data-route="admin-content"><span class="nav-icon">✓</span><span>内容审核</span></button>
+        <button class="nav-item" data-route="admin-models"><span class="nav-icon">⚙</span><span>模型与 Prompt</span></button>
+      </section>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="theme-row">
+        <button class="theme-btn active" data-theme-set="light" title="浅色模式">☀</button>
+        <button class="theme-btn" data-theme-set="dark" title="深色模式">☾</button>
+      </div>
+      <button class="admin-switch" data-route="admin-sources">进入管理端</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <section class="page active" id="page-featured"></section>
+    <section class="page" id="page-all"></section>
+    <section class="page" id="page-reports"></section>
+    <section class="page" id="page-topics"></section>
+    <section class="page" id="page-favorites"></section>
+    <section class="page" id="page-subscriptions"></section>
+    <section class="page" id="page-knowledge"></section>
+    <section class="page" id="page-agent"></section>
+    <section class="page" id="page-admin-sources"></section>
+    <section class="page" id="page-admin-crawls"></section>
+    <section class="page" id="page-admin-content"></section>
+    <section class="page" id="page-admin-models"></section>
+    <section class="page" id="page-detail"></section>
+    <section class="page" id="page-event"></section>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="source-modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="source-modal-title">
+    <div class="modal-header">
+      <div>
+        <h2 id="source-modal-title">新增信源</h2>
+        <p>Source Agent 会识别入口类型、试抓取、检查重复并给出推荐配置。</p>
+      </div>
+      <button class="btn icon" data-close-modal aria-label="关闭">×</button>
+    </div>
+    <div class="modal-grid">
+      <div><label>信源主体</label><input id="new-source-entity" value="OpenAI" /></div>
+      <div><label>入口名称</label><input id="new-source-name" value="OpenAI News" /></div>
+      <div style="grid-column:1/-1"><label>URL</label><input id="new-source-url" value="https://openai.com/news/" /></div>
+      <div><label>来源等级</label><select id="new-source-level"><option>OFFICIAL_PRIMARY</option><option>RESEARCH</option><option>PROFESSIONAL_MEDIA</option><option>COMMUNITY</option></select></div>
+      <div><label>展示策略</label><select id="new-source-policy"><option>FULLTEXT_ALLOWED</option><option>SUMMARY_ONLY</option><option>LINK_ONLY</option><option>HIDDEN</option></select></div>
+      <div><label>索引策略</label><select id="new-source-index-policy"><option>PUBLIC_RAG</option><option>METADATA_ONLY</option><option>NO_INDEX</option></select></div>
+    </div>
+    <button class="btn" id="probe-source" style="margin-top:14px">运行 Agent 试抓取</button>
+    <div class="probe-result" id="probe-result">
+      <strong>试抓取成功 · 建议启用</strong>
+      <ul>
+        <li>识别类型：WEB_LIST；发现 RSS 候选与 Sitemap。</li>
+        <li>近 10 条内容可稳定提取标题、时间、正文和原文地址。</li>
+        <li>建议抓取周期：15 分钟；权威分：98；语言：英文。</li>
+        <li>重复信源检查：未发现相同 Endpoint。</li>
+      </ul>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" data-close-modal>取消</button>
+      <button class="btn primary" id="confirm-source">确认并启用</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const icon = (path) => `<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
+  const icons = {
+    search: icon('<circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path>'),
+    plus: icon('<path d="M12 5v14M5 12h14"></path>'),
+    arrow: icon('<path d="m9 18 6-6-6-6"></path>'),
+    send: icon('<path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path>'),
+    refresh: icon('<path d="M20 11a8 8 0 1 0 2 5"></path><path d="M20 4v7h-7"></path>'),
+    external: icon('<path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>'),
+    bookmark: icon('<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z"></path>'),
+    download: icon('<path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path>'),
+    check: icon('<path d="m5 12 4 4L19 6"></path>')
+  };
+
+  const articles = [
+    {id:1,time:'11:30',source:'OpenReview',sourceType:'论文',channel:'paper',title:'OpenReview 新研究提出面向工具调用 Agent 的可验证轨迹评测框架',summary:'研究把复杂 Agent 任务拆成计划、工具参数、环境状态和结果证据四类检查点，用可复现轨迹判断长程任务是否真正完成。',reason:'评测对象从最终答案扩展到完整执行轨迹，对 Agent 的可靠性、审计和回归测试有直接工程价值。',tags:['论文研究','Agent','评测'],score:78,featured:true,official:true,published:'2026-07-16 11:27',original:'openreview.net',body:'该框架为每一步工具调用记录输入、状态变化和可验证结果，并通过公开任务集比较不同 Agent 在长程规划、失败恢复和证据完整性上的表现。'},
+    {id:2,time:'10:10',source:'官网：天工短剧工作台',sourceType:'官网',channel:'official',title:'天工短剧工作台发布“Agent智能分镜 + 无限画布”双轨创作模式',summary:'通过导演 Agent 自动解析剧本、规划站位与机位，并支持多视角场景生成，解决 AI 短剧角色变脸和站位漂移问题。',reason:'产品已具备完整的镜头组织和可控生成链路，是生成式视频从单点工具走向生产系统的典型案例。',tags:['智能体','产品更新','视频'],score:76,featured:true,official:true,published:'2026-07-16 10:10',original:'tiangong.cn',body:'工作台支持剧本拆解、角色站位、镜头语言生成、场景资产复用和分镜版本管理，并提供可编辑的无限画布。'},
+    {id:3,time:'09:40',source:'官网：MiniMax',sourceType:'官网',channel:'official',title:'MiniMax Code 2.0 桌面端焕新：底层架构全面升级，金融模块即将上线',summary:'MiniMax Code 2.0 基于 Agent 框架重构桌面端，显著提升会话启动速度与长程复杂任务的执行稳定性，并打通企业查与金融数据库。',reason:'从代码变成分析报告的链路更完整，适合关注 Coding Agent 与垂直行业 Agent 的开发者。',tags:['MCP/工具','产品更新','编码'],score:74,featured:true,official:true,published:'2026-07-16 09:40',original:'minimax.io',body:'新版强化多步骤任务执行、代码索引和企业数据检索，并提供结果可追溯的报告生成能力。'},
+    {id:4,time:'13:57',source:'TechCrunch AI（RSS）',sourceType:'媒体',channel:'media',title:'多位开发者报告 Coding Agent 文件权限异常，厂商尚未完成确认',summary:'可信技术媒体汇总了多位开发者对文件权限异常的报告；目前缺少厂商完整复现结论，事件仍在调查。',reason:'这类未证实但潜在高影响的安全报告值得跟踪，同时必须与已证实事实严格区分。',tags:['安全','Agent','行业动态'],score:71,factStatus:'UNCONFIRMED',published:'2026-07-16 13:57',original:'techcrunch.com',body:'报道整理了公开问题单与开发者描述，并强调尚不能确认是否来自同一根因。AI Hotspot 将其作为未证实报道展示，不进入精选。'},
+    {id:5,time:'13:43',source:'IT之家（RSS）',sourceType:'RSS',channel:'media',title:'百度文库、网盘升级 GenFlow，面向行业用户推出独立客户端',summary:'百度文库与网盘将启动重大升级，面向金融、教育、办公等专业从业者推出独立网页端和客户端。核心升级是再次升级 GenFlow。',reason:'传统内容与云盘产品正在向可调用技能、可执行工作流的 AI 工作台转型。',tags:['智能体','产品更新','部署/工程'],score:72,published:'2026-07-16 12:56',original:'ithome.com',body:'公开报道显示，百度文库、网盘将上线面向金融、教育、办公等专业从业者的独立网页端、客户端，此次升级核心之一是 GenFlow。'},
+    {id:6,time:'13:41',source:'Hacker News',sourceType:'社区',channel:'community',title:'开发者讨论模型配额增长与成本预算的可预测性',summary:'社区讨论指出模型配额虽然增加，但不同套餐和推理预算之间的可预测性正在下降。',reason:'这是对大模型产品定价与开发者预算管理矛盾的直接观察。',tags:['开发者社区','现象/趋势'],score:70,published:'2026-07-16 13:41',original:'news.ycombinator.com',body:'讨论围绕模型调用配额、长思考预算和团队成本规划展开，内容作为社区观点展示。'},
+    {id:7,time:'12:18',source:'GitHub Releases',sourceType:'GitHub',channel:'official',title:'LangGraph 发布新的持久化检查点与人工审批接口',summary:'新版增加可恢复执行、检查点迁移和统一的 human-in-the-loop 审批 API，便于构建长流程 Agent。',reason:'这直接改善了生产 Agent 的恢复性与审计能力。',tags:['Agent','开源','工程'],score:73,published:'2026-07-16 12:18',original:'github.com',body:'本次 Release 提供新的 checkpoint schema、审批中断节点和持久化适配器接口。'},
+    {id:8,time:'08:30',source:'Hugging Face Daily Papers',sourceType:'论文',channel:'paper',title:'新论文提出面向长程工具调用的分层记忆压缩方法',summary:'研究通过事件级记忆、工具状态摘要和动态检索预算，提高长程 Agent 在复杂任务中的一致性。',reason:'方案与 Agent 工程中的上下文管理直接相关，具有较强复现价值。',tags:['论文','记忆','Agent'],score:69,published:'2026-07-16 08:30',original:'huggingface.co',body:'论文提出三层记忆结构，并在浏览器任务与代码代理基准上验证。'}
+  ];
+
+  const sources = [
+    {name:'OpenAI News',entity:'OpenAI',country:'美国',type:'官网',connector:'WEB_LIST',interval:'15 分钟',authority:98,status:'healthy',items:8,last:'2 分钟前'},
+    {name:'Anthropic Newsroom',entity:'Anthropic',country:'美国',type:'官网',connector:'WEB_SITEMAP',interval:'20 分钟',authority:98,status:'healthy',items:5,last:'4 分钟前'},
+    {name:'GitHub Copilot Changelog',entity:'GitHub',country:'美国',type:'Changelog',connector:'WEB_LIST',interval:'15 分钟',authority:96,status:'healthy',items:12,last:'6 分钟前'},
+    {name:'Hugging Face Daily Papers',entity:'Hugging Face',country:'国际',type:'论文',connector:'WEB_LIST',interval:'60 分钟',authority:88,status:'healthy',items:24,last:'9 分钟前'},
+    {name:'Hacker News AI',entity:'Hacker News',country:'美国',type:'社区',connector:'API',interval:'10 分钟',authority:66,status:'healthy',items:19,last:'3 分钟前'},
+    {name:'机器之心',entity:'机器之心',country:'中国',type:'媒体',connector:'WEB_LIST',interval:'15 分钟',authority:74,status:'warning',items:31,last:'38 分钟前'},
+    {name:'阿里云开发者社区',entity:'阿里云',country:'中国',type:'社区',connector:'WEB_LIST',interval:'30 分钟',authority:82,status:'healthy',items:14,last:'17 分钟前'},
+    {name:'OpenReview AI',entity:'OpenReview',country:'国际',type:'论文',connector:'OPENREVIEW_API',interval:'60 分钟',authority:90,status:'healthy',items:17,last:'12 分钟前'},
+    {name:'arXiv cs.AI',entity:'arXiv',country:'国际',type:'论文',connector:'RSS',interval:'120 分钟',authority:86,status:'healthy',items:42,last:'41 分钟前'},
+    {name:'DeepSeek GitHub Releases',entity:'DeepSeek',country:'中国',type:'GitHub',connector:'GITHUB_RELEASE',interval:'30 分钟',authority:96,status:'error',items:0,last:'3 小时前'}
+  ];
+
+  const topics = [['Agent 智能体',344,55],['AI 编码',268,41],['多模态',232,37],['模型发布',195,32],['RAG / 检索',184,29],['部署工程',166,24],['开源生态',153,21],['具身智能',121,18],['AI 视频',113,16],['安全与治理',98,14],['论文研究',92,12],['行业应用',84,11]];
+  const favorites = new Set(JSON.parse(localStorage.getItem('ai-hotspot-favorites') || '[2]'));
+  let activeRoute = location.hash.replace('#/','') || 'featured';
+  let activeFilter = 'all';
+  let selectedReview = 0;
+
+  function saveFavorites(){ localStorage.setItem('ai-hotspot-favorites', JSON.stringify([...favorites])); }
+  function toast(text){ const el=document.getElementById('toast'); el.textContent=text; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1800); }
+  function routeTo(route){
+    activeRoute = route;
+    if(route !== 'detail') location.hash = '#/' + route;
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    const page = document.getElementById('page-' + route);
+    if(page) page.classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.route===route));
+    window.scrollTo({top:0});
+    renderRoute(route);
+  }
+
+  function header(title, sub, actions=''){
+    return `<div class="page-header"><div><h1>${title}</h1><p>${sub}</p></div><div class="header-actions">${actions}</div></div>`;
+  }
+  function articleCard(a, showReason=true){
+    const f = favorites.has(a.id);
+    return `<article class="article-card" data-id="${a.id}">
+      <div class="article-top">
+        <span class="source-dot">${a.source.replace(/^(官网：|社区：)/,'').slice(0,2)}</span>
+        <span>${a.source}</span><span class="source-type">· ${a.sourceType}</span>
+        ${a.featured?'<span class="badge">✦ 精选</span>':''}
+        ${a.official?'<span class="badge">官方/一手</span>':''}
+        ${a.factStatus==='UNCONFIRMED'?'<span class="status warning">未证实</span>':''}
+        <span class="score">● ${a.score}</span>
+        <button class="bookmark ${f?'active':''}" data-favorite="${a.id}" aria-label="收藏">${icons.bookmark}</button>
+      </div>
+      <h3 class="article-title" data-open="${a.id}">${a.title}</h3>
+      <p class="article-summary">${a.summary}</p>
+      <div class="article-tags">${a.tags.map(t=>`<span># ${t}</span>`).join('')}</div>
+      ${showReason?`<div class="reason"><strong>推荐理由：</strong>${a.reason}</div>`:''}
+    </article>`;
+  }
+  function timeline(list){
+    return `<div class="date-heading">7月16日 <small>星期四 · ${list.length} 条</small></div><div class="timeline">${list.map(a=>`<div class="timeline-row"><div class="time-col"><span>${a.time}</span></div>${articleCard(a)}</div>`).join('')}</div>`;
+  }
+  function bindArticleEvents(){
+    document.querySelectorAll('[data-open]').forEach(el=>el.onclick=()=>openDetail(Number(el.dataset.open)));
+    document.querySelectorAll('[data-favorite]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); const id=Number(el.dataset.favorite); favorites.has(id)?favorites.delete(id):favorites.add(id); saveFavorites(); renderRoute(activeRoute); toast(favorites.has(id)?'已收藏':'已取消收藏'); });
+  }
+
+  function renderFeatured(){
+    const filtered = activeFilter==='all'?articles:articles.filter(a=>a.channel===activeFilter);
+    const html = `<div class="page-shell">
+      ${header('精选','2026年7月16日星期四 · AI 自动挑选的高价值公开内容',`<button class="btn">${icons.download} 导出日报</button><button class="btn primary" data-route="knowledge">进入知识库</button>`)}
+      <div class="toolbar"><div class="tabs">${[['all','全部'],['official','官方'],['paper','论文'],['community','社区'],['media','媒体']].map(([k,n])=>`<button class="tab ${activeFilter===k?'active':''}" data-filter="${k}">${n}</button>`).join('')}</div><div class="search"><input id="featured-search" placeholder="搜索标题 / 摘要 / 正文..."/><button>${icons.search}</button></div></div>
+      <section class="hot-panel"><div class="panel-title">当前热点 <small>基于独立信源数量与时效计算</small></div>
+        <button class="hot-row" data-event="1"><span class="hot-rank">1</span><span class="hot-title">Agent 产品开始从 Demo 进入可交付工作流阶段</span><small>5 个独立信源</small></button>
+        <button class="hot-row" data-event="2"><span class="hot-rank">2</span><span class="hot-title">Coding Agent 文件系统权限边界受到关注</span><small>4 个独立信源</small></button>
+        <button class="hot-row" data-event="3"><span class="hot-rank">3</span><span class="hot-title">端侧多模态与长上下文模型持续密集发布</span><small>4 个独立信源</small></button>
+      </section>
+      <div id="featured-list">${timeline(filtered)}</div>
+    </div>`;
+    document.getElementById('page-featured').innerHTML=html;
+    document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{activeFilter=b.dataset.filter;renderFeatured();});
+    document.querySelectorAll('[data-event]').forEach(b=>b.onclick=()=>openEvent(Number(b.dataset.event)));
+    document.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>routeTo(b.dataset.route));
+    const search=document.getElementById('featured-search');
+    search.oninput=()=>{ const q=search.value.trim().toLowerCase(); const list=filtered.filter(a=>(a.title+a.summary+a.tags.join('')).toLowerCase().includes(q)); document.getElementById('featured-list').innerHTML=timeline(list); bindArticleEvents(); };
+    bindArticleEvents();
+  }
+
+  function renderAll(){
+    document.getElementById('page-all').innerHTML=`<div class="page-shell">${header('全部 AI 动态','只展示通过准入规则、已发布且公开的官方、论文、社区与媒体内容。')}
+      <div class="filter-row"><label>渠道</label><select id="all-channel"><option value="all">全部</option><option value="official">官方</option><option value="paper">论文</option><option value="community">社区</option><option value="media">媒体</option></select><label>时间</label><select><option>最近 24 小时</option><option>最近 7 天</option><option>最近 30 天</option></select><label>事实状态</label><select><option>已证实与未证实</option><option>仅已证实</option></select><label class="toggle"><input type="checkbox"/>只看未读</label><div class="search"><input id="all-search" placeholder="搜索公开内容..."/><button>${icons.search}</button></div></div>
+      <div id="all-list">${timeline(articles)}</div></div>`;
+    const rerender=()=>{const c=document.getElementById('all-channel').value,q=document.getElementById('all-search').value.toLowerCase();const list=articles.filter(a=>(c==='all'||a.channel===c)&&(!q||(a.title+a.summary).toLowerCase().includes(q)));document.getElementById('all-list').innerHTML=timeline(list);bindArticleEvents();};
+    document.getElementById('all-channel').onchange=rerender; document.getElementById('all-search').oninput=rerender; bindArticleEvents();
+  }
+
+  function renderReports(){
+    document.getElementById('page-reports').innerHTML=`<div class="page-shell">${header('AI 日报','每天自动生成，也支持编辑审核后发布与邮件推送。',`<button class="btn">周报</button><button class="btn primary" data-route="subscriptions">创建订阅</button>`)}
+      <section class="report-hero"><div><div class="badge">7 月 16 日</div><h2>Agent 产品进入可交付阶段，Coding Agent 权限边界成为焦点</h2><p>今日值得关注的变化集中在 Agent 工作流产品化、文件系统安全、长程任务稳定性和端侧多模态模型。系统共聚合 31 篇内容，去重为 13 个独立事件。</p><button class="btn primary">阅读今日日报 ${icons.arrow}</button></div><div class="report-metrics"><div class="metric"><strong>13</strong><span>独立事件</span></div><div class="metric"><strong>8</strong><span>一手信源</span></div><div class="metric"><strong>31</strong><span>原始内容</span></div><div class="metric"><strong>8 min</strong><span>预计阅读</span></div></div></section>
+      <div class="report-list">${[['7月15日','端侧多模态模型密集发布，企业数据分析 Agent 加速落地','18 个事件 · 11 个一手信源 · 阅读约 10 分钟'],['7月14日','模型厂商转向工作流竞争，开源推理框架持续优化','15 个事件 · 9 个一手信源 · 阅读约 9 分钟'],['7月13日','MCP 工具生态扩张，Agent 可观测性成为工程重点','12 个事件 · 7 个一手信源 · 阅读约 7 分钟']].map(r=>`<div class="report-row"><strong>${r[0]}</strong><div><h3>${r[1]}</h3><p>${r[2]}</p></div><span class="muted">查看报告 ${icons.arrow}</span></div>`).join('')}</div></div>`;
+    document.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>routeTo(b.dataset.route));
+  }
+
+  function renderTopics(){
+    document.getElementById('page-topics').innerHTML=`<div class="page-shell">${header('主题','由 AI 标签、实体和事件自动聚合形成的长期知识入口。',`<button class="btn primary">+ 新建自定义主题</button>`)}
+      <div class="topic-grid">${topics.map(t=>`<button class="topic-card"><h3>${t[0]}</h3><div class="topic-stats"><span>${t[1]} 条收录</span><span>${t[2]} 条精选</span></div></button>`).join('')}</div>
+      <section class="topic-feature"><div><span class="badge">持续更新</span><h2>Agent 智能体</h2><p>聚合 Agent 框架、工具调用、MCP、长期记忆、评测、安全、应用产品和企业落地等方向。近 30 天内容量增长 34%，官方与开源 Release 占比持续提高。</p><button class="btn primary" data-route="knowledge">基于此主题提问</button></div><div class="spark-bars">${[34,48,41,62,53,69,75,61,84,78,92,100].map(v=>`<i style="height:${v}%"></i>`).join('')}</div></section></div>`;
+    document.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>routeTo(b.dataset.route));
+  }
+
+  function renderFavorites(){
+    const list=articles.filter(a=>favorites.has(a.id));
+    document.getElementById('page-favorites').innerHTML=`<div class="page-shell">${header('收藏','保存稍后阅读的资讯、论文和研究线索。')} ${list.length?timeline(list):'<div class="hot-panel" style="padding:50px;text-align:center;color:var(--muted)">暂无收藏内容</div>'}</div>`;
+    bindArticleEvents();
+  }
+
+  function renderSubscriptions(){
+    document.getElementById('page-subscriptions').innerHTML=`<div class="page-shell">${header('订阅与邮件','管理每日、每周简报和投递状态；默认时区 Asia/Shanghai。',`<button class="btn primary" id="create-subscription">+ 新建订阅</button>`)}
+      <div class="admin-metrics"><div class="admin-metric"><strong>2</strong><span>启用订阅</span></div><div class="admin-metric"><strong>09:00</strong><span>每日默认发送</span></div><div class="admin-metric"><strong>周一</strong><span>每周简报</span></div><div class="admin-metric"><strong>100%</strong><span>近 7 日送达</span></div></div>
+      <div class="agent-grid">
+        <div class="agent-card"><div class="agent-icon">日</div><span class="status">已启用</span><h3>每日 AI 精选</h3><p>每天 09:00 · Asia/Shanghai<br/>全部主题 · 最多 12 条</p><button class="btn" data-subscription-action="pause">暂停订阅</button></div>
+        <div class="agent-card"><div class="agent-icon">周</div><span class="status">已启用</span><h3>Agent 与 AI 编码周报</h3><p>每周一 09:00 · Asia/Shanghai<br/>2 个主题 · 最多 20 条</p><button class="btn" data-subscription-action="edit">编辑偏好</button></div>
+        <div class="agent-card"><div class="agent-icon">退</div><span class="status warning">邮件必备</span><h3>偏好与一键退订</h3><p>每封邮件包含偏好入口与一次性退订链接，退订后发送前再次校验。</p><button class="btn danger" data-subscription-action="unsubscribe">演示退订</button></div>
+      </div>
+      <div class="run-table"><div class="table-title">最近投递</div><div class="run-head"><span>邮件</span><span>订阅</span><span>状态</span><span>时间</span><span>Provider</span><span></span></div>
+        ${[['7月16日 AI 每日精选','每日 AI 精选','发送成功','09:00','MailProvider'],['Agent 与 AI 编码周报','Agent 与 AI 编码周报','发送成功','周一 09:00','MailProvider'],['7月15日 AI 每日精选','每日 AI 精选','重试后成功','09:05','MailProvider']].map((r,i)=>`<div class="run-row"><strong>${r[0]}</strong><span>${r[1]}</span><span class="status ${i===2?'warning':''}">${r[2]}</span><span>${r[3]}</span><span>${r[4]}</span><button class="btn icon small">›</button></div>`).join('')}</div></div>`;
+    document.getElementById('create-subscription').onclick=()=>toast('已打开订阅创建流程（原型演示）');
+    document.querySelectorAll('[data-subscription-action]').forEach(b=>b.onclick=()=>toast(`${b.textContent}：操作已记录（原型演示）`));
+  }
+
+  function renderKnowledge(){
+    document.getElementById('page-knowledge').innerHTML=`<div class="knowledge-shell"><header class="knowledge-header"><div><h1>知识库问答</h1><p>基于站内信源进行带时间、来源和证据约束的 RAG 研究。</p></div><div class="header-actions"><button class="btn">研究记录</button><button class="btn primary">新建对话</button></div></header>
+      <div class="knowledge-layout"><aside class="query-panel"><div class="panel-heading"><h3>检索范围</h3><button class="btn small">重置</button></div>
+        <div class="form-group"><label>时间范围</label><select><option>最近 30 天</option><option>最近 7 天</option><option>最近 90 天</option><option>全部历史</option></select></div>
+        <div class="form-group"><label>主题</label><select><option>全部主题</option><option>Agent 智能体</option><option>AI 编码</option><option>RAG / 检索</option></select></div>
+        <div class="form-group"><label>实体</label><input placeholder="OpenAI、Anthropic..."/></div>
+        <div class="form-group"><label>信源等级</label><div class="check-list"><label><input id="official-only" type="checkbox" checked/>只看官方一手来源</label><label><input type="checkbox"/>包含研究机构</label><label><input type="checkbox"/>包含专业媒体</label><label><input type="checkbox"/>包含社区观点</label></div></div>
+        <div class="form-group"><label>输出模式</label><select><option>问答</option><option>对比分析</option><option>时间线</option><option>深度研究报告</option></select></div>
+      </aside>
+      <section class="chat-panel"><div class="chat-messages" id="chat-messages"><div class="chat-welcome" id="chat-welcome"><div class="orb">AI</div><h2>从可信信源中寻找答案</h2><p>系统会先解析问题，再执行关键词与向量混合检索、事件级去重和重排序，最后生成带引用的回答。</p><div class="suggestions"><button class="suggestion">最近一个月 OpenAI 和 Anthropic 在 Coding Agent 上有哪些变化？</button><button class="suggestion">只根据官方来源，总结 MCP 生态近期的主要进展。</button><button class="suggestion">对比国内主要大模型厂商最近的 Agent 产品方向。</button><button class="suggestion">生成过去 30 天 RAG 技术演进时间线。</button></div></div></div>
+        <div class="chat-compose"><div class="compose-box"><textarea id="rag-question" rows="1" placeholder="输入问题，例如：最近 30 天 Agent 框架有哪些重要更新？"></textarea><button class="send-btn" id="rag-send">${icons.send}</button></div></div>
+      </section>
+      <aside class="evidence-panel"><div class="panel-heading"><h3>证据来源</h3><span class="muted">0 条</span></div><div id="evidence-list"><p class="muted" style="font-size:11px;line-height:1.7">回答后将在这里展示标题、来源、发布时间、证据片段和原文入口。</p></div><div class="retrieval-steps"><div class="panel-heading"><h3>检索过程</h3></div><div class="step"><i>1</i><span>解析问题中的时间、实体和来源限制</span></div><div class="step"><i>2</i><span>BM25 与向量检索并行召回</span></div><div class="step"><i>3</i><span>事件级去重并执行 Rerank</span></div><div class="step"><i>4</i><span>生成答案并校验引用</span></div></div></aside></div></div>`;
+    document.querySelectorAll('.suggestion').forEach(b=>b.onclick=()=>{document.getElementById('rag-question').value=b.textContent;askRag();});
+    document.getElementById('rag-send').onclick=askRag;
+    document.getElementById('rag-question').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();askRag();}};
+  }
+
+  function askRag(){
+    const input=document.getElementById('rag-question'); if(!input||!input.value.trim()) return;
+    const q=input.value.trim(); const messages=document.getElementById('chat-messages'); const welcome=document.getElementById('chat-welcome'); if(welcome) welcome.remove();
+    messages.insertAdjacentHTML('beforeend',`<div class="message user"><div class="bubble">${escapeHtml(q)}</div></div><div class="message assistant" id="answer-loading"><div class="bubble">正在执行混合检索、事件去重与证据重排序……</div></div>`);
+    input.value=''; messages.scrollTop=messages.scrollHeight;
+    setTimeout(()=>{
+      const loading=document.getElementById('answer-loading'); if(!loading)return;
+      loading.innerHTML=`<div class="bubble"><div class="answer-title">结论概览</div><p>近一个月的主要变化可以归纳为三点：</p><p>第一，模型厂商正在把 Coding Agent 从代码补全扩展为可恢复的长程工作流，并强化检查点、权限隔离与人工审批能力 <span class="citation-chip">1</span><span class="citation-chip">2</span>。</p><p>第二，Agent 产品开始接入企业数据库、MCP 工具和可编辑报告输出，目标从“回答问题”转向“完成可交付任务” <span class="citation-chip">3</span>。</p><p>第三，文件系统和工具权限成为产品安全重点，建议工程上默认采用工作目录白名单、最小权限、删除前确认与可恢复操作 <span class="citation-chip">4</span>。</p><p class="muted" style="font-size:10px">本回答仅使用当前筛选范围内的站内证据。若需要，我可以继续生成公司对比表或事件时间线。</p></div>`;
+      document.getElementById('evidence-list').innerHTML=[articles[6],articles[2],articles[1],articles[3]].map((a,i)=>`<div class="evidence-card"><strong>${i+1}. ${a.title}</strong><p>${a.summary.slice(0,72)}……</p><div class="evidence-meta"><span>${a.source}</span><span>${a.published.slice(0,10)}</span></div></div>`).join('');
+      document.querySelector('.evidence-panel .panel-heading span').textContent='4 条'; messages.scrollTop=messages.scrollHeight;
+    },900);
+  }
+
+  function renderAgent(){
+    document.getElementById('page-agent').innerHTML=`<div class="page-shell">${header('Agent 工作台','使用受控工具完成研究、订阅、信源运营和采集故障诊断。',`<button class="btn primary" id="create-agent-run">+ 创建任务</button>`)}
+      <div class="agent-grid">${[['研究 Agent','搜索、比较、构建时间线并生成带引用的专题报告。','Research'],['订阅 Agent','把自然语言需求转成结构化订阅，并按计划推送。','Schedule'],['信源运营 Agent','检测信源类型、试抓取、查重并推荐配置。','Source'],['采集运维 Agent','分析采集失败、结构变化与任务积压，给出修复建议。','Ops']].map(a=>`<div class="agent-card"><div class="agent-icon">${a[2].slice(0,1)}</div><h3>${a[0]}</h3><p>${a[1]}</p><button class="btn" data-agent="${a[0]}">启动 Agent</button></div>`).join('')}</div>
+      <div class="run-table"><div class="table-title">最近运行</div><div class="run-head"><span>任务</span><span>Agent</span><span>状态</span><span>耗时</span><span>Token</span><span></span></div>
+        ${[['生成 Agent 框架近 30 天对比报告','研究 Agent','已完成','1m 48s','12.4k'],['每天 09:00 推送 AI 编码精选','订阅 Agent','等待确认','18s','1.2k'],['试抓取 OpenAI News','信源运营','已完成','9s','0.8k'],['诊断机器之心列表解析异常','采集运维','运行中','42s','2.6k']].map((r,i)=>`<div class="run-row"><strong>${r[0]}</strong><span>${r[1]}</span><span class="status ${i===1?'warning':''}">${r[2]}</span><span>${r[3]}</span><span>${r[4]}</span><button class="btn icon small">›</button></div>`).join('')}</div></div>`;
+    document.querySelectorAll('[data-agent]').forEach(b=>b.onclick=()=>toast(`${b.dataset.agent} 任务已创建（原型演示）`));
+    document.getElementById('create-agent-run').onclick=()=>toast('已打开任务创建流程（原型演示）');
+  }
+
+  function renderAdminSources(){
+    document.getElementById('page-admin-sources').innerHTML=`<div class="page-shell">${header('信源管理','统一维护 SourceEntity、Endpoint、采集策略、权威分与正文展示政策。',`<button class="btn">批量导入 Registry</button><button class="btn primary" id="open-source-modal">${icons.plus} 新增信源</button>`)}
+      <div class="admin-metrics"><div class="admin-metric"><strong>68</strong><span>已启用 Endpoint</span></div><div class="admin-metric"><strong>61</strong><span>健康运行</span></div><div class="admin-metric"><strong>4</strong><span>需要关注</span></div><div class="admin-metric"><strong>327</strong><span>今日新内容</span></div></div>
+      <div class="admin-toolbar"><div class="tabs"><button class="tab active">全部</button><button class="tab">官方</button><button class="tab">媒体</button><button class="tab">论文</button><button class="tab">社区</button></div><div class="search"><input id="source-search" placeholder="搜索主体或 Endpoint..."/><button>${icons.search}</button></div></div>
+      <div class="data-table"><div class="source-head"><span>信源</span><span>类型</span><span>Connector</span><span>周期</span><span>权威分</span><span>健康</span><span>今日内容</span><span>操作</span></div><div id="source-rows">${sourceRows(sources)}</div></div></div>`;
+    document.getElementById('open-source-modal').onclick=()=>document.getElementById('source-modal').classList.add('open');
+    const ss=document.getElementById('source-search'); ss.oninput=()=>document.getElementById('source-rows').innerHTML=sourceRows(sources.filter(s=>(s.name+s.entity).toLowerCase().includes(ss.value.toLowerCase())));
+    bindSourceRows();
+  }
+  function sourceRows(list){return list.map((s,i)=>`<div class="source-row"><div class="source-name"><span class="source-logo">${s.entity.slice(0,2)}</span><div><strong>${s.name}</strong><small>${s.entity} · ${s.country} · ${s.last}</small></div></div><span>${s.type}</span><code class="tag-code">${s.connector}</code><span>${s.interval}</span><strong>${s.authority}</strong><span class="status ${s.status==='warning'?'warning':s.status==='error'?'error':s.status==='manual'?'manual':''}">${s.status==='healthy'?'正常':s.status==='warning'?'警告':s.status==='error'?'失败':'人工'}</span><span>${s.items} 条</span><button class="btn small" data-source-index="${i}">管理</button></div>`).join('');}
+  function bindSourceRows(){document.querySelectorAll('[data-source-index]').forEach(b=>b.onclick=()=>toast('已打开信源配置抽屉（原型演示）'));}
+
+  function renderAdminCrawls(){
+    const jobs=[['OpenAI News','WEB_LIST','成功','18 条','2.4s','2026-07-16 17:02:12'],['机器之心','WEB_LIST','解析警告','31 条','6.8s','2026-07-16 16:41:03'],['DeepSeek GitHub Releases','GITHUB_RELEASE','失败','0 条','1.3s','2026-07-16 14:09:48'],['Hacker News AI','API','成功','19 条','830ms','2026-07-16 17:01:24'],['arXiv cs.AI','RSS','成功','42 条','1.9s','2026-07-16 16:21:08']];
+    document.getElementById('page-admin-crawls').innerHTML=`<div class="page-shell">${header('采集监控','观察成功率、结构变化、任务耗时、积压与重试情况。',`<button class="btn">${icons.refresh} 刷新</button><button class="btn primary">运行健康检查</button>`)}
+      <div class="chart-layout"><div class="chart-card"><div class="panel-heading"><h3>24 小时采集量</h3><span class="muted">共 2,841 条原始文档</span></div><div class="bar-chart">${[42,35,51,64,48,72,69,81,76,88,70,63,91,84,75,98,82,77,100,93,86,74,68,79].map(v=>`<i style="height:${v}%"></i>`).join('')}</div></div><div class="chart-card"><div class="panel-heading"><h3>Connector 健康度</h3></div>${[['RSS / Atom',99],['Website / Sitemap',92],['GitHub',97],['Hugging Face',98],['arXiv / OpenReview',96]].map(h=>`<div class="health-line"><span>${h[0]}</span><div><i style="width:${h[1]}%"></i></div><strong>${h[1]}%</strong></div>`).join('')}</div></div>
+      <div class="data-table"><div class="job-head"><span>信源</span><span>Connector</span><span>状态</span><span>结果</span><span>耗时</span><span>执行时间</span><span></span></div>${jobs.map((j,i)=>`<div class="job-row"><strong>${j[0]}</strong><code class="tag-code">${j[1]}</code><span class="status ${i===1?'warning':i===2?'error':''}">${j[2]}</span><span>${j[3]}</span><span>${j[4]}</span><span>${j[5]}</span><button class="btn icon small" data-retry="${i}">↻</button></div>`).join('')}</div></div>`;
+    document.querySelectorAll('[data-retry]').forEach(b=>b.onclick=()=>toast('重试任务已进入队列'));
+  }
+
+  const reviewItems=[
+    {title:'Coding Agent 文件权限异常仍待厂商确认',source:'TechCrunch AI',issue:'可信媒体的未证实报道，需要保持 UNCONFIRMED、排除精选并等待官方证据。',members:['TechCrunch AI 报道','公开 GitHub Issue','厂商后续公告（待补充）']},
+    {title:'百度文库、网盘升级 GenFlow',source:'IT之家',issue:'疑似转载链，需要选择一手主条目并降低重复报道权重。',members:['IT之家报道','百度官方站点公告','新浪科技报道']},
+    {title:'新论文提出长程工具调用记忆压缩方法',source:'Hugging Face Papers',issue:'分类模型在“论文研究”和“Agent 工程”之间置信度较低。',members:['Hugging Face Daily Papers','arXiv 原文']}
+  ];
+  function renderAdminContent(){
+    const detail=reviewItems[selectedReview];
+    document.getElementById('page-admin-content').innerHTML=`<div class="page-shell">${header('内容审核','处理低置信度分类、精选候选、事件聚类冲突与版权策略异常。',`<button class="btn">审核规则</button><button class="btn primary">批量通过高置信度</button>`)}
+      <div class="review-layout"><div class="review-list">${reviewItems.map((r,i)=>`<button class="review-item ${i===selectedReview?'active':''}" data-review="${i}"><span class="muted">${r.source}</span><h3>${r.title}</h3><p>${r.issue}</p></button>`).join('')}</div>
+      <div class="review-detail"><div class="badge">事件聚类复核</div><h2>${detail.title}</h2><p class="muted">${detail.issue}</p><div style="margin-top:15px"><strong style="font-size:11px">候选成员</strong>${detail.members.map((m,i)=>`<label class="cluster-card"><input type="checkbox" ${i<2?'checked':''}/><div><strong>${m}</strong><p>相似度 ${(0.93-i*.08).toFixed(2)} · ${i===0?'建议主条目':'关联报道'}</p></div></label>`).join('')}</div><div class="modal-actions"><button class="btn danger">拆分事件</button><button class="btn">保存草稿</button><button class="btn primary" id="approve-review">确认聚类</button></div></div></div></div>`;
+    document.querySelectorAll('[data-review]').forEach(b=>b.onclick=()=>{selectedReview=Number(b.dataset.review);renderAdminContent();});
+    document.getElementById('approve-review').onclick=()=>toast('审核结果已保存并生成纠错样本');
+  }
+
+  function renderAdminModels(){
+    document.getElementById('page-admin-models').innerHTML=`<div class="page-shell">${header('模型与 Prompt','为摘要、翻译、分类、聚类、RAG 和 Agent 设置模型路由、版本与评测。',`<button class="btn">运行评测集</button><button class="btn primary">发布新版本</button>`)}
+      <div class="model-layout"><div class="model-list"><div class="panel-heading"><h3>任务模型路由</h3><span class="muted">Provider 抽象 / Mock 可用</span></div>${[['内容摘要','DeepSeek API','GenerationProvider'],['事件聚类判断','DeepSeek API','GenerationProvider'],['Embedding','BAAI/bge-m3','EmbeddingProvider'],['Rerank','BAAI/bge-reranker-v2-m3','RerankProvider'],['RAG 回答','DeepSeek API','流式输出'],['开发测试','Mock Provider','无需 API Key']].map((m,i)=>`<div class="model-row"><div><strong>${m[0]}</strong><small>${m[2]}</small></div><code class="tag-code">${m[1]}</code><span class="status ${i===5?'warning':''}">${i===5?'开发可用':'已启用'}</span></div>`).join('')}</div>
+      <div class="prompt-card"><div class="panel-heading"><h3>Prompt 编辑器</h3><span class="badge">v12</span></div><label>任务</label><select><option>内容摘要</option><option>事件聚类</option><option>RAG 回答</option></select><label>系统 Prompt</label><textarea>你是 AI 情报编辑。请基于输入原文生成准确、信息密度高的中文摘要。不得补充原文未支持的结论；区分事实、推断与观点；输出 JSON。</textarea><label>变更说明</label><input value="加强事实与推断区分，统一产品名称"/><div class="admin-metrics" style="grid-template-columns:repeat(3,1fr);margin-top:13px"><div class="admin-metric"><strong>94.2%</strong><span>结构有效率</span></div><div class="admin-metric"><strong>91.8%</strong><span>事实一致性</span></div><div class="admin-metric"><strong>¥18.4</strong><span>今日成本</span></div></div><button class="btn primary" style="width:100%">保存为新版本</button></div></div></div>`;
+  }
+
+  function openEvent(id){
+    const event={
+      title:id===2?'Coding Agent 文件系统权限边界受到关注':'Agent 产品开始从 Demo 进入可交付工作流阶段',
+      summary:id===2?'多家可信媒体与开发者社区正在追踪文件权限异常。当前仍存在未证实部分，事件时间线严格区分报道、公开问题单和后续官方证据。':'近期产品更新显示，Agent 正从单轮演示转向可恢复、可审批、可审计并能交付报告或工程结果的完整工作流。',
+      fact:id===2?'UNCONFIRMED':'CONFIRMED',sources:id===2?4:5
+    };
+    activeRoute='event'; document.querySelectorAll('.page').forEach(p=>p.classList.remove('active')); document.getElementById('page-event').classList.add('active'); document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+    document.getElementById('page-event').innerHTML=`<article class="detail-page"><button class="back" id="event-back">← 返回精选</button><div class="detail-meta"><span class="badge">热点事件</span><span class="status ${event.fact==='UNCONFIRMED'?'warning':''}">${event.fact==='UNCONFIRMED'?'未证实':'已证实'}</span><span>${event.sources} 个独立信源</span></div><h1>${event.title}</h1><div class="info-box"><label>事件摘要</label><p>${event.summary}</p></div><div class="article-body"><h2>来源时间线</h2><p><strong>11:30 · 一手/研究：</strong>${articles[0].title}</p><p><strong>10:10 · 官方：</strong>${articles[1].title}</p><p><strong>09:40 · 官方：</strong>${articles[2].title}</p><h2>跨事件关联</h2><p>关联“Agent 审批与恢复能力演进”事件，关系为 SAME_SERIES；该关联不会自动合并两个事件。</p><h2>研究入口</h2><p>可基于当前事件的有权内容创建订阅或发起带引用研究。检索前会按当前用户的数据权限过滤。</p></div><div class="header-actions"><button class="btn" data-route="subscriptions">订阅此事件</button><button class="btn primary" data-route="knowledge">基于事件提问</button></div></article>`;
+    document.getElementById('event-back').onclick=()=>routeTo('featured'); document.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>routeTo(b.dataset.route)); window.scrollTo(0,0);
+  }
+
+  function openDetail(id){ const a=articles.find(x=>x.id===id); if(!a)return; activeRoute='detail'; document.querySelectorAll('.page').forEach(p=>p.classList.remove('active')); document.getElementById('page-detail').classList.add('active'); document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active')); document.getElementById('page-detail').innerHTML=`<article class="detail-page"><button class="back" id="detail-back">← 返回</button><div class="detail-meta"><strong>${a.source}</strong><span>· ${a.sourceType}</span>${a.featured?'<span class="badge">精选</span>':''}${a.official?'<span class="badge">官方/一手</span>':''}${a.factStatus==='UNCONFIRMED'?'<span class="status warning">未证实</span>':''}<span class="score">● ${a.score}</span><button class="bookmark ${favorites.has(a.id)?'active':''}" data-favorite="${a.id}">${icons.bookmark}</button><button class="btn small">${icons.download} 导出 Markdown</button></div><h1>${a.title}</h1><p class="muted">${a.published} · ${a.original}</p>${a.featured?`<div class="info-box"><label>精选理由</label><p>${a.reason}</p></div>`:''}<div class="info-box"><label>AI 摘要</label><p>${a.summary}</p></div><div class="article-body"><span class="muted">原文 / 策略允许的清洗正文</span><p>${a.body}</p><h2>事件与知识关系</h2><p>系统会将本条内容与相同事实事件的官方公告、GitHub Release、媒体报道和社区观点聚合，并优先以一手来源作为事件主条目；一篇内容也可关联多个事件。</p></div><div class="detail-tags">${a.tags.map(t=>`<span># ${t}</span>`).join('')}</div><button class="btn">阅读原文 ${icons.external} <span class="mono">${a.original}</span></button></article>`; document.getElementById('detail-back').onclick=()=>routeTo(location.hash.replace('#/','')||'featured'); bindArticleEvents(); window.scrollTo(0,0); }
+
+  function renderRoute(route){
+    ({featured:renderFeatured,all:renderAll,reports:renderReports,topics:renderTopics,favorites:renderFavorites,subscriptions:renderSubscriptions,knowledge:renderKnowledge,agent:renderAgent,'admin-sources':renderAdminSources,'admin-crawls':renderAdminCrawls,'admin-content':renderAdminContent,'admin-models':renderAdminModels}[route]||renderFeatured)();
+  }
+  function escapeHtml(s){return s.replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+
+  document.addEventListener('click',e=>{
+    const route=e.target.closest('[data-route]'); if(route){routeTo(route.dataset.route);}
+    const close=e.target.closest('[data-close-modal]'); if(close)document.getElementById('source-modal').classList.remove('open');
+  });
+  document.querySelectorAll('[data-theme-set]').forEach(b=>b.onclick=()=>{ const t=b.dataset.themeSet; document.documentElement.dataset.theme=t; localStorage.setItem('ai-hotspot-theme',t); document.querySelectorAll('[data-theme-set]').forEach(x=>x.classList.toggle('active',x.dataset.themeSet===t)); });
+  const storedTheme=localStorage.getItem('ai-hotspot-theme')||'light'; document.documentElement.dataset.theme=storedTheme; document.querySelectorAll('[data-theme-set]').forEach(x=>x.classList.toggle('active',x.dataset.themeSet===storedTheme));
+  document.getElementById('source-modal').onclick=e=>{if(e.target.id==='source-modal')e.currentTarget.classList.remove('open');};
+  document.getElementById('probe-source').onclick=()=>{document.getElementById('probe-result').classList.add('show');toast('Agent 试抓取完成');};
+  document.getElementById('confirm-source').onclick=()=>{document.getElementById('source-modal').classList.remove('open');toast('信源已启用（原型演示）');};
+  window.addEventListener('hashchange',()=>{const r=location.hash.replace('#/','')||'featured';if(r!==activeRoute)routeTo(r);});
+  routeTo(activeRoute);
+</script>
+</body>
+</html>
