@@ -1,0 +1,73 @@
+spring:
+  application:
+    name: ai-hotspot-core
+  datasource:
+    url: ${CORE_DATABASE_URL:jdbc:postgresql://localhost:5432/ai_hotspot}
+    username: ${POSTGRES_USER:ai_hotspot}
+    password: ${POSTGRES_PASSWORD:ai_hotspot}
+    hikari:
+      maximum-pool-size: ${DATABASE_POOL_MAX_SIZE:10}
+      minimum-idle: ${DATABASE_POOL_MIN_IDLE:2}
+      connection-timeout: 5000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  mvc:
+    problemdetails:
+      enabled: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  rabbitmq:
+    addresses: ${RABBITMQ_ADDRESSES:localhost:5672}
+    username: ${RABBITMQ_DEFAULT_USER:ai_hotspot}
+    password: ${RABBITMQ_DEFAULT_PASS:ai_hotspot}
+    virtual-host: ${RABBITMQ_DEFAULT_VHOST:ai_hotspot}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 4
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    properties:
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+
+info:
+  app:
+    name: AI Hotspot Core API
+    version: ${AI_HOTSPOT_VERSION:0.1.0}
+
+ai-hotspot:
+  environment: ${AI_HOTSPOT_ENV:development}
+  version: ${AI_HOTSPOT_VERSION:0.1.0}
+  ai-base-url: ${AI_API_BASE_URL:http://localhost:8000}
+  smoke:
+    enabled: ${AI_HOTSPOT_SMOKE_ENABLED:false}
+  outbox:
+    enabled: ${OUTBOX_ENABLED:true}
+    fixed-delay: ${OUTBOX_FIXED_DELAY_MS:1000}
+    batch-size: ${OUTBOX_BATCH_SIZE:20}
+  mail:
+    provider: ${MAIL_PROVIDER:mock}
+    from: ${MAIL_FROM:AI Hotspot <no-reply@ai-hotspot.local>}

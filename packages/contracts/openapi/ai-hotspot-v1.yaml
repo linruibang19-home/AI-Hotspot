@@ -1,0 +1,52 @@
+openapi: 3.1.0
+info:
+  title: AI Hotspot Core API
+  version: 0.1.0
+servers:
+  - url: /api/core
+paths:
+  /api/v1/health:
+    get:
+      operationId: getCoreHealth
+      responses:
+        "200":
+          description: Core API 正常
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /api/v1/system/smoke/outbox:
+    post:
+      operationId: createOutboxSmokeEvent
+      description: 仅在本地 Smoke 开关启用时可用。
+      responses:
+        "202":
+          description: 测试事件已进入 Outbox
+  /api/v1/system/smoke/mail:
+    post:
+      operationId: sendSmokeMail
+      description: 仅在本地 Smoke 开关启用时可用。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipient, subject]
+              properties:
+                recipient: { type: string, format: email }
+                subject: { type: string, minLength: 1 }
+      responses:
+        "202":
+          description: 测试邮件已交给 MailProvider
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status, service, version, environment, correlationId]
+      properties:
+        status: { type: string, const: UP }
+        service: { type: string, const: core-api }
+        version: { type: string }
+        environment: { type: string }
+        correlationId: { type: string }

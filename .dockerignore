@@ -1,0 +1,19 @@
+.git
+.github
+.idea
+.vscode
+.env
+.env.*
+!.env.example
+**/node_modules
+**/.next
+**/target
+**/.venv
+**/__pycache__
+AI Hotspot 项目方案
+AI_PULSE_DEVELOPMENT_SPEC.md
+AI_PULSE_PROTOTYPE.html
+AI_HOTSPOT_PROTOTYPE.html
+*.log
+test-results
+playwright-report

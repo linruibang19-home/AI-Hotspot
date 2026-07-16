@@ -90,9 +90,9 @@ raw-documents/
 page-snapshots/
 
 # Local model files and caches
-models/
-model-cache/
-huggingface-cache/
+/models/
+/model-cache/
+/huggingface-cache/
 *.bin
 *.safetensors
 *.onnx
@@ -113,4 +113,3 @@ traces/
 # Keep deliberate project reference screenshots under the Chinese blueprint folder.
 !AI Hotspot 项目方案/01 参考产品与现有材料/AI HOT 界面截图/
 !AI Hotspot 项目方案/01 参考产品与现有材料/AI HOT 界面截图/*.png
-

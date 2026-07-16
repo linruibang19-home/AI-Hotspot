@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-hotspot.local/contracts/events/event-envelope.schema.json",
+  "title": "AI Hotspot Event Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "eventType", "eventVersion", "idempotencyKey", "aggregateId", "payload"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "eventType": { "type": "string", "minLength": 1 },
+    "eventVersion": { "type": "integer", "minimum": 1 },
+    "idempotencyKey": { "type": "string", "minLength": 1 },
+    "aggregateId": { "type": "string", "format": "uuid" },
+    "payload": { "type": "object" }
+  }
+}

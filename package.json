@@ -1,0 +1,17 @@
+{
+  "name": "ai-hotspot",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @ai-hotspot/web dev",
+    "build:web": "pnpm --filter @ai-hotspot/web build",
+    "lint:web": "pnpm --filter @ai-hotspot/web lint",
+    "typecheck:web": "pnpm --filter @ai-hotspot/web typecheck",
+    "test:web": "pnpm --filter @ai-hotspot/web test",
+    "check": "pnpm lint:web && pnpm typecheck:web && pnpm test:web && pnpm build:web"
+  }
+}
