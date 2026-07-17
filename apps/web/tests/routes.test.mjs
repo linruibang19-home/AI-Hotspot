@@ -5,6 +5,7 @@ import { test } from "node:test";
 const expectedPages = [
   "src/app/page.tsx",
   "src/app/all/page.tsx",
+  "src/app/content/[id]/page.tsx",
   "src/app/reports/page.tsx",
   "src/app/topics/page.tsx",
   "src/app/favorites/page.tsx",
@@ -48,4 +49,14 @@ test("M2 identity and source management use the real Core API", () => {
   const navigation = readFileSync("src/lib/navigation.ts", "utf8");
   assert.match(navigation, /access: "operator"/);
   assert.match(navigation, /access: "admin"/);
+});
+
+test("M3 public feeds use the real public content API", () => {
+  const featured = readFileSync("src/app/page.tsx", "utf8");
+  const all = readFileSync("src/app/all/page.tsx", "utf8");
+  const api = readFileSync("src/lib/public-content.ts", "utf8");
+  assert.match(featured, /getPublicContents/);
+  assert.match(all, /getPublicContents/);
+  assert.match(api, /\/api\/v1\/public\/contents/);
+  assert.doesNotMatch(featured, /featuredItems/);
 });

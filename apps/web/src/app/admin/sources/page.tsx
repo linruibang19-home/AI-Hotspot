@@ -62,7 +62,11 @@ export default function AdminSourcesPage() {
         endpointName: form.get("endpointName"), endpointUrl: form.get("endpointUrl"),
         endpointType: form.get("endpointType"), language: form.get("language"),
         pollingIntervalSeconds: Number(form.get("pollingIntervalSeconds")),
-        displayPolicy: form.get("displayPolicy"), indexPolicy: form.get("indexPolicy"), config: {},
+        displayPolicy: form.get("displayPolicy"), indexPolicy: form.get("indexPolicy"), config: {
+          autoPublish: false,
+          maxItems: 50,
+          maxResponseBytes: 2097152,
+        },
       }) });
       setDialogOpen(false);
       setNotice("信源已创建，请完成试抓取后再启用。");
