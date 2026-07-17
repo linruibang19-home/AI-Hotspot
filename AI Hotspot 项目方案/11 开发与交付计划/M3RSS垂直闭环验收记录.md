@@ -30,7 +30,7 @@ SourceEndpoint → FetchJob/Outbox → RabbitMQ → RSS/Atom Worker
 | 验收项 | 结果 |
 |---|---|
 | Core 单元/上下文测试 | 15/15 通过 |
-| Python pytest | 10/10 通过 |
+| Python pytest | 12/12 通过 |
 | Python Ruff | 通过 |
 | Web 路由测试 | 5/5 通过 |
 | Web ESLint/TypeScript/生产构建 | 通过 |
@@ -51,7 +51,7 @@ SourceEndpoint → FetchJob/Outbox → RabbitMQ → RSS/Atom Worker
 | ContentItem | 15 |
 | 重复采集新增 | 0 |
 | 有 ETag/Last-Modified 的入口 | 3 |
-| HTTP 304 | 4 |
+| HTTP 304 | 3（最新一轮；不同 Feed 缓存头可能变化） |
 | MinIO 原件 | 可读取 |
 | RabbitMQ 恢复后任务 | SUCCEEDED |
 | 确定性坏源 | DEAD_LETTERED |
@@ -80,6 +80,7 @@ SourceEndpoint → FetchJob/Outbox → RabbitMQ → RSS/Atom Worker
 5. 应用内浏览器运行时资产路径不可用：记录失败后切换独立浏览器自动化完成同等 QA；
 6. PowerShell 未引用 `@eN` 导致第一次交互命令被语法解析：引用 selector 后搜索和详情跳转通过；
 7. 手工任务幂等键按毫秒窗口可能碰撞：改为包含 jobId；定时任务仍以 Endpoint+调度窗口幂等。
+8. M1 的 `content.processing.smoke` 不含真实 `contentItemId`，M3 Worker 曾将其误送入真实内容处理并形成 2 条长期 unacked：增加显式兼容分支、补齐 Smoke 事件信封和 2 项回归测试；重建后主队列 ready=0、unacked=0，随后 M1/M3 Smoke 再次通过。
 
 ## 7. 已知边界
 

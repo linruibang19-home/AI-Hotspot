@@ -2,6 +2,7 @@ package com.aihotspot.core.api;
 
 import com.aihotspot.core.messaging.OutboxStore;
 import com.aihotspot.core.notification.MailProvider;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -32,10 +33,14 @@ public class SystemSmokeController {
     public Map<String, Object> outbox() {
         UUID eventId = UUID.randomUUID();
         UUID aggregateId = UUID.randomUUID();
+        UUID correlationId = UUID.randomUUID();
+        UUID traceId = UUID.randomUUID();
         String payload = """
                 {"eventId":"%s","eventType":"content.processing.smoke","eventVersion":1,
-                "idempotencyKey":"m1:%s","aggregateId":"%s","payload":{"stage":"M1"}}
-                """.formatted(eventId, eventId, aggregateId).replace("\n", "");
+                "aggregateType":"M1Smoke","aggregateId":"%s","idempotencyKey":"m1:%s",
+                "correlationId":"%s","traceId":"%s","occurredAt":"%s","producer":"core-api",
+                "payload":{"stage":"M1"}}
+                """.formatted(eventId, aggregateId, eventId, correlationId, traceId, Instant.now()).replace("\n", "");
         outboxStore.append(
                 eventId,
                 "content.processing.smoke",

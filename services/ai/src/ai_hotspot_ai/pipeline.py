@@ -73,6 +73,12 @@ def process_crawl_event(payload: dict[str, object], settings: Settings) -> dict[
 
 
 def process_content_event(payload: dict[str, object], settings: Settings) -> dict[str, object]:
+    if payload.get("eventType") == "content.processing.smoke":
+        if not begin_inbox(payload, CONTENT_CONSUMER):
+            return {"duplicate": True}
+        result = {"stage": "M1", "accepted": True}
+        complete_inbox(payload, CONTENT_CONSUMER, result)
+        return result
     if not begin_inbox(payload, CONTENT_CONSUMER):
         return {"duplicate": True}
     try:
