@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aihotspot.core.audit.AuditMapper">
+    <insert id="insert">
+        insert into governance.audit_log (
+            id, actor_id, actor_type, action, target_type, target_id,
+            before_data, after_data, client_ip, user_agent, correlation_id, trace_id
+        ) values (
+            #{id}, #{actorId}, #{actorType}, #{action}, #{targetType}, #{targetId},
+            cast(#{beforeData} as jsonb), cast(#{afterData} as jsonb), #{clientIp}, #{userAgent}, #{correlationId}, #{traceId}
+        )
+    </insert>
+
+    <select id="findByTarget" resultType="com.aihotspot.core.audit.AuditMapper$AuditView">
+        select id, actor_id, actor_type, action, target_type, target_id,
+               before_data::text as before_data, after_data::text as after_data,
+               correlation_id, created_at
+        from governance.audit_log
+        where target_type = #{targetType}
+        <if test="targetId != null">and target_id = #{targetId}</if>
+        order by created_at desc, id desc
+        limit #{limit}
+    </select>
+</mapper>

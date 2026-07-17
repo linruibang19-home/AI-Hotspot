@@ -9,6 +9,11 @@ spring:
       maximum-pool-size: ${DATABASE_POOL_MAX_SIZE:10}
       minimum-idle: ${DATABASE_POOL_MIN_IDLE:2}
       connection-timeout: 5000
+  data:
+    redis:
+      url: ${REDIS_URL:redis://:ai_hotspot@localhost:6379/0}
+      connect-timeout: 3s
+      timeout: 3s
   jpa:
     open-in-view: false
     hibernate:
@@ -37,16 +42,27 @@ spring:
       mail.smtp.connectiontimeout: 5000
       mail.smtp.timeout: 5000
       mail.smtp.writetimeout: 5000
+  session:
+    timeout: ${SESSION_TIMEOUT:12h}
+    redis:
+      namespace: ai-hotspot:session
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  servlet:
+    session:
+      cookie:
+        name: AIHOTSPOT_SESSION
+        http-only: true
+        same-site: lax
+        secure: ${SESSION_COOKIE_SECURE:false}
 
 mybatis:
   mapper-locations: classpath*:mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
     default-fetch-size: 100
-
-server:
-  port: ${SERVER_PORT:8080}
-  shutdown: graceful
 
 management:
   endpoints:
@@ -77,3 +93,13 @@ ai-hotspot:
   mail:
     provider: ${MAIL_PROVIDER:mock}
     from: ${MAIL_FROM:AI Hotspot <no-reply@ai-hotspot.local>}
+  bootstrap-admin:
+    enabled: ${BOOTSTRAP_ADMIN_ENABLED:false}
+    email: ${BOOTSTRAP_ADMIN_EMAIL:}
+    password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+    display-name: ${BOOTSTRAP_ADMIN_DISPLAY_NAME:AI Hotspot 管理员}
+  security:
+    login-max-failures: ${LOGIN_MAX_FAILURES:5}
+    login-window-seconds: ${LOGIN_WINDOW_SECONDS:900}
+    invitation-max-attempts: ${INVITATION_MAX_ATTEMPTS:10}
+    invitation-window-seconds: ${INVITATION_WINDOW_SECONDS:3600}

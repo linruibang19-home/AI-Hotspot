@@ -145,6 +145,7 @@ services:
       CORE_DATABASE_URL: ${CORE_DATABASE_URL:-jdbc:postgresql://postgres:5432/ai_hotspot}
       POSTGRES_USER: ${POSTGRES_USER:-ai_hotspot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ai_hotspot}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-ai_hotspot}@redis:6379/0
       RABBITMQ_ADDRESSES: rabbitmq:5672
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-ai_hotspot}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-ai_hotspot}
@@ -158,6 +159,11 @@ services:
       MAIL_FROM: ${MAIL_FROM:-AI Hotspot <no-reply@ai-hotspot.local>}
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      BOOTSTRAP_ADMIN_ENABLED: ${BOOTSTRAP_ADMIN_ENABLED:-true}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@aihotspot.local}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-change-me-before-use}
+      BOOTSTRAP_ADMIN_DISPLAY_NAME: ${BOOTSTRAP_ADMIN_DISPLAY_NAME:-AI Hotspot 管理员}
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:

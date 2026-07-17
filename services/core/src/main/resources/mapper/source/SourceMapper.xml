@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aihotspot.core.source.SourceMapper">
+    <insert id="insertEntity">
+        insert into source.source_entity (
+            id, name, slug, entity_type, country_code, official_level, authority_score,
+            website_url, logo_url, status, version, created_by
+        ) values (
+            #{id}, #{name}, #{slug}, #{entityType}, #{countryCode}, #{officialLevel}, #{authorityScore},
+            #{websiteUrl}, #{logoUrl}, #{status}, #{version}, #{createdBy}
+        )
+    </insert>
+
+    <insert id="insertEndpoint">
+        insert into source.source_endpoint (
+            id, source_entity_id, name, url, normalized_url, endpoint_type, connector_type,
+            language, polling_interval_seconds, display_policy, index_policy, authority_override,
+            config, credential_ref, status, health_status, failure_count, version, created_by
+        ) values (
+            #{id}, #{sourceEntityId}, #{name}, #{url}, #{normalizedUrl}, #{endpointType}, #{connectorType},
+            #{language}, #{pollingIntervalSeconds}, #{displayPolicy}, #{indexPolicy}, #{authorityOverride},
+            cast(#{configJson} as jsonb), #{credentialRef}, #{status}, #{healthStatus}, #{failureCount}, #{version}, #{createdBy}
+        )
+    </insert>
+
+    <select id="findById" resultType="com.aihotspot.core.source.SourceMapper$SourceDetail">
+        select id, name, slug, entity_type, country_code, official_level, authority_score,
+               website_url, logo_url, status, version, created_by, created_at, updated_at
+        from source.source_entity where id = #{id}
+    </select>
+
+    <select id="findEndpointById" resultType="com.aihotspot.core.source.SourceMapper$EndpointDetail">
+        select id, source_entity_id, name, url, normalized_url, endpoint_type, connector_type,
+               language, polling_interval_seconds, display_policy, index_policy, authority_override,
+               config::text as config_json, credential_ref, status, health_status,
+               last_success_at, last_failure_at, failure_count, last_probe_status,
+               last_probe_latency_ms, version, created_by, created_at, updated_at
+        from source.source_endpoint where id = #{id}
+    </select>
+
+    <select id="list" resultType="com.aihotspot.core.source.SourceMapper$SourceSummary">
+        select s.id, s.name, s.slug, s.entity_type, s.official_level, s.authority_score,
+               s.status as source_status, e.id as endpoint_id, e.name as endpoint_name,
+               e.endpoint_type, e.url as endpoint_url, e.status as endpoint_status,
+               e.health_status, e.last_success_at, e.last_failure_at,
+               e.version as endpoint_version, e.updated_at
+        from source.source_entity s
+        join source.source_endpoint e on e.source_entity_id = s.id
+        <where>
+            <if test="status != null">e.status = #{status}</if>
+            <if test="query != null">
+                <if test="status != null">and</if>
+                (s.name ilike '%' || #{query} || '%' or e.name ilike '%' || #{query} || '%' or e.normalized_url ilike '%' || #{query} || '%')
+            </if>
+        </where>
+        order by e.updated_at desc, e.id desc
+        limit #{limit}
+    </select>
+
+    <select id="listBySourceId" resultType="com.aihotspot.core.source.SourceMapper$SourceSummary">
+        select s.id, s.name, s.slug, s.entity_type, s.official_level, s.authority_score,
+               s.status as source_status, e.id as endpoint_id, e.name as endpoint_name,
+               e.endpoint_type, e.url as endpoint_url, e.status as endpoint_status,
+               e.health_status, e.last_success_at, e.last_failure_at,
+               e.version as endpoint_version, e.updated_at
+        from source.source_entity s
+        join source.source_endpoint e on e.source_entity_id = s.id
+        where s.id = #{sourceId}
+        order by e.updated_at desc, e.id desc
+    </select>
+
+    <select id="metrics" resultType="com.aihotspot.core.source.SourceMapper$SourceMetrics">
+        select count(*) as total_endpoints,
+               count(*) filter (where status = 'ACTIVE') as active_endpoints,
+               count(*) filter (where health_status = 'HEALTHY') as healthy_endpoints,
+               count(*) filter (where health_status in ('WARNING', 'FAILED')) as attention_endpoints
+        from source.source_endpoint
+        where status &lt;&gt; 'ARCHIVED'
+    </select>
+
+    <update id="activateEntity">
+        update source.source_entity
+        set status = 'ACTIVE', version = version + 1, updated_at = now()
+        where id = #{id} and status = 'DRAFT'
+    </update>
+
+    <update id="updateEndpointStatus">
+        update source.source_endpoint
+        set status = #{status}, version = version + 1, updated_at = now()
+        where id = #{id} and version = #{version}
+    </update>
+
+    <update id="updateProbe">
+        update source.source_endpoint
+        set health_status = #{healthStatus}, last_probe_status = #{httpStatus},
+            last_probe_latency_ms = #{latencyMs},
+            last_success_at = case when #{successful} then now() else last_success_at end,
+            last_failure_at = case when #{successful} then last_failure_at else now() end,
+            failure_count = case when #{successful} then 0 else failure_count + 1 end,
+            version = version + 1, updated_at = now()
+        where id = #{id} and version = #{version}
+    </update>
+</mapper>

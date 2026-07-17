@@ -28,9 +28,18 @@ try {
     }
     $postgresUser = Get-DotEnvValue 'POSTGRES_USER' 'ai_hotspot'
     $postgresDb = Get-DotEnvValue 'POSTGRES_DB' 'ai_hotspot'
+    $adminEmail = Get-DotEnvValue 'BOOTSTRAP_ADMIN_EMAIL' 'admin@aihotspot.local'
+    $adminPassword = Get-DotEnvValue 'BOOTSTRAP_ADMIN_PASSWORD' 'change-me-before-use'
+    $coreBase = 'http://127.0.0.1:8088/api/core/api/v1'
+    $adminSession = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+    $csrf = Invoke-RestMethod -Uri "$coreBase/auth/csrf" -WebSession $adminSession -TimeoutSec 10
+    $csrfHeaders = @{ $csrf.headerName = $csrf.token }
+    $null = Invoke-RestMethod -Method Post -Uri "$coreBase/auth/login" `
+        -WebSession $adminSession -Headers $csrfHeaders -ContentType 'application/json; charset=utf-8' `
+        -Body (@{ email = $adminEmail; password = $adminPassword } | ConvertTo-Json) -TimeoutSec 10
 
     $outboxResponse = Invoke-RestMethod -Method Post `
-        -Uri 'http://127.0.0.1:8088/api/core/api/v1/system/smoke/outbox' -TimeoutSec 10
+        -Uri "$coreBase/system/smoke/outbox" -WebSession $adminSession -Headers $csrfHeaders -TimeoutSec 10
     $eventId = $outboxResponse.eventId
     $status = ''
     $inboxCount = 0
@@ -77,7 +86,7 @@ try {
         subject = $subject
     } | ConvertTo-Json -Compress
     $mailResponse = Invoke-RestMethod -Method Post `
-        -Uri 'http://127.0.0.1:8088/api/core/api/v1/system/smoke/mail' `
+        -Uri "$coreBase/system/smoke/mail" -WebSession $adminSession -Headers $csrfHeaders `
         -ContentType 'application/json' -Body $mailBody -TimeoutSec 10
     Start-Sleep -Milliseconds 500
     $mailpit = Invoke-RestMethod -Uri 'http://127.0.0.1:8025/api/v1/messages' -TimeoutSec 10

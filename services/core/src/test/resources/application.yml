@@ -12,6 +12,8 @@ spring:
       enabled: true
   flyway:
     enabled: false
+  session:
+    store-type: none
   rabbitmq:
     listener:
       simple:
@@ -28,3 +30,5 @@ ai-hotspot:
   mail:
     provider: mock
     from: no-reply@ai-hotspot.local
+  bootstrap-admin:
+    enabled: false

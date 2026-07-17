@@ -98,6 +98,7 @@ page-snapshots/
 *.onnx
 
 # Test and browser artifacts
+artifacts/
 playwright-report/
 test-results/
 blob-report/
