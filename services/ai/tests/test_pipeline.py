@@ -25,6 +25,7 @@ def test_m1_smoke_event_is_completed_without_content_item(monkeypatch) -> None:
 def test_duplicate_m1_smoke_event_is_ignored(monkeypatch) -> None:
     monkeypatch.setattr(pipeline, "begin_inbox", lambda payload, consumer: False)
     result = pipeline.process_content_event(
-        {"eventType": "content.processing.smoke"}, None  # type: ignore[arg-type]
+        {"eventType": "content.processing.smoke"},
+        None,  # type: ignore[arg-type]
     )
     assert result == {"duplicate": True}
