@@ -83,3 +83,13 @@ test("topic cards navigate to real public-content filters", () => {
   assert.match(topics, /通义千问 Qwen/);
   assert.match(all, /initialQuery/);
 });
+
+test("M5 content governance uses real queues, events and ticket APIs", () => {
+  const page = readFileSync("src/app/admin/content/page.tsx", "utf8");
+  assert.match(page, /apiFetch<Response>\("\/admin\/content\?limit=100"\)/);
+  assert.match(page, /\/admin\/content\/events\?limit=100/);
+  assert.match(page, /\/admin\/content\/tickets\?limit=100/);
+  assert.match(page, /MARK_UNCONFIRMED/);
+  assert.match(page, /DEBUNK/);
+  assert.doesNotMatch(page, /WorkspacePage/);
+});
