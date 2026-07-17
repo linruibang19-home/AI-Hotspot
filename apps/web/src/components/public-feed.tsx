@@ -13,9 +13,17 @@ const filters: Array<[Filter, string]> = [
   ["ARTICLE", "资讯"],
 ];
 
-export function PublicFeed({ items, featured = false }: { items: PublicContent[]; featured?: boolean }) {
+export function PublicFeed({
+  items,
+  featured = false,
+  initialQuery = "",
+}: {
+  items: PublicContent[];
+  featured?: boolean;
+  initialQuery?: string;
+}) {
   const [filter, setFilter] = useState<Filter>("ALL");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("zh-CN");
     return items.filter((item) => {

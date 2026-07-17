@@ -106,3 +106,38 @@ def test_reserved_x_connector_has_no_parser_or_network_contract():
     with pytest.raises(FeedError, match="not available") as error:
         parse_connector("X", b"{}", "https://x.com/example", {}, 10)
     assert error.value.code == "CONNECTOR_NOT_AVAILABLE"
+
+
+def test_connector_keyword_filter_keeps_only_ai_items():
+    feed = b"""<?xml version='1.0'?><rss version='2.0'><channel><title>Official</title>
+    <item><guid>1</guid><title>Quarterly financial results</title></item>
+    <item><guid>2</guid><title>New AI agent platform</title></item>
+    </channel></rss>"""
+    entries = parse_connector(
+        "RSS", feed, "https://example.com/feed", {"includeKeywords": ["AI", "agent"]}, 10
+    )
+    assert [entry.title for entry in entries] == ["New AI agent platform"]
+
+
+def test_short_ascii_keyword_does_not_match_inside_unrelated_word():
+    feed = b"""<?xml version='1.0'?><rss version='2.0'><channel><title>Official</title>
+    <item><guid>1</guid><title>Maintainers guide</title></item>
+    <item><guid>2</guid><title>AI maintainers guide</title></item>
+    </channel></rss>"""
+    entries = parse_connector(
+        "RSS", feed, "https://example.com/feed", {"includeKeywords": ["AI"]}, 10
+    )
+    assert [entry.title for entry in entries] == ["AI maintainers guide"]
+
+
+def test_github_connector_accepts_tags_api_shape():
+    payload = [{"name": "v3.0.0", "commit": {"sha": "abc123"}}]
+    entries = parse_connector(
+        "GITHUB",
+        json.dumps(payload).encode(),
+        "https://api.github.com/repos/org/repo/tags?per_page=30",
+        {},
+        10,
+    )
+    assert entries[0].title == "v3.0.0"
+    assert entries[0].original_url == "https://github.com/org/repo/releases/tag/v3.0.0"

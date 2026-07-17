@@ -55,7 +55,7 @@ public class SourceCatalogInitializer implements ApplicationRunner {
         List<CatalogItem> items = objectMapper.readValue(
                 new ClassPathResource("source-catalog.json").getInputStream(),
                 new TypeReference<List<CatalogItem>>() {});
-        int inserted = 0;
+        int synchronizedEndpoints = 0;
         for (CatalogItem item : items) {
             UUID proposedSourceId = stableId("source:" + item.slug());
             sourceMapper.insertEntityIfAbsent(new SourceMapper.SourceEntity(
@@ -64,14 +64,14 @@ public class SourceCatalogInitializer implements ApplicationRunner {
                     item.websiteUrl(), null, "ACTIVE", 0, owner.id()));
             UUID sourceId = UUID.fromString(sourceMapper.findIdBySlug(item.slug()));
             UUID endpointId = stableId("endpoint:" + item.catalogKey());
-            inserted += sourceMapper.insertEndpointIfAbsent(new SourceMapper.SourceEndpoint(
+            synchronizedEndpoints += sourceMapper.insertEndpointIfAbsent(new SourceMapper.SourceEndpoint(
                     endpointId, sourceId, item.endpointName(), item.endpointUrl(), item.endpointUrl(),
                     item.endpointType(), item.endpointType(), item.language(), item.pollingIntervalSeconds(),
                     item.displayPolicy(), item.indexPolicy(), null,
                     objectMapper.writeValueAsString(item.config()), null, item.status(), "UNKNOWN",
                     0, 0, owner.id(), "PRODUCTION", item.catalogKey()));
         }
-        log.info("Source catalog ready: {} definitions, {} new endpoints", items.size(), inserted);
+        log.info("Source catalog ready: {} definitions, {} synchronized endpoints", items.size(), synchronizedEndpoints);
     }
 
     private UUID stableId(String value) {

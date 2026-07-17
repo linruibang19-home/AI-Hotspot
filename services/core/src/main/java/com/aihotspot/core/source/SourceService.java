@@ -37,7 +37,7 @@ public class SourceService {
             "timeoutSeconds", "maxResponseBytes", "userAgent", "respectRobots",
             "maxItems", "maxAttempts", "autoPublish", "relevanceScore", "qualityScore",
             "owner", "repository", "resource", "categories", "venueIds", "feed",
-            "query", "urlPattern", "minScore", "maxAgeHours", "testRun");
+            "query", "urlPattern", "includeKeywords", "minScore", "maxAgeHours", "testRun");
 
     private final SourceMapper mapper;
     private final AuditService audit;
@@ -196,6 +196,7 @@ public class SourceService {
             validateBooleanConfig(c.config(), "respectRobots");
             validateBooleanConfig(c.config(), "autoPublish");
             validateBooleanConfig(c.config(), "testRun");
+            validateStringListConfig(c.config(), "includeKeywords");
             Object userAgent = c.config().get("userAgent");
             if (userAgent != null && (!(userAgent instanceof String value) || value.isBlank() || value.length() > 200)) {
                 invalid("Connector 配置 userAgent 必须是 1 到 200 字符的字符串");
@@ -227,6 +228,16 @@ public class SourceService {
     private void validateBooleanConfig(Map<String, Object> config, String key) {
         Object value = config.get(key);
         if (value != null && !(value instanceof Boolean)) invalid("Connector 配置 " + key + " 必须是布尔值");
+    }
+
+    private void validateStringListConfig(Map<String, Object> config, String key) {
+        Object value = config.get(key);
+        if (value == null) return;
+        if (!(value instanceof java.util.List<?> values) || values.isEmpty() || values.size() > 50
+                || values.stream().anyMatch(item -> !(item instanceof String text)
+                        || text.isBlank() || text.length() > 80)) {
+            invalid("Connector 配置 " + key + " 必须是 1 到 50 个非空短字符串");
+        }
     }
 
     String normalizeAndValidatePublicUrl(String rawUrl) {
