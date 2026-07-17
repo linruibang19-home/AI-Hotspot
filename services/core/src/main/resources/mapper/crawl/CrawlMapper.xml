@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aihotspot.core.crawl.CrawlMapper">
+    <select id="lockDueEndpoints" resultType="com.aihotspot.core.crawl.CrawlMapper$EndpointForFetch">
+        select id, source_entity_id, url, endpoint_type, polling_interval_seconds,
+               status, config::text as config_json, next_fetch_at
+        from source.source_endpoint
+        where status = 'ACTIVE'
+          and endpoint_type in ('RSS', 'ATOM')
+          and (next_fetch_at is null or next_fetch_at &lt;= now())
+        order by next_fetch_at nulls first, id
+        for update skip locked
+        limit #{limit}
+    </select>
+
+    <select id="findEndpoint" resultType="com.aihotspot.core.crawl.CrawlMapper$EndpointForFetch">
+        select id, source_entity_id, url, endpoint_type, polling_interval_seconds,
+               status, config::text as config_json, next_fetch_at
+        from source.source_endpoint
+        where id = #{id}
+    </select>
+
+    <insert id="insertJob">
+        insert into source.fetch_job (
+            id, endpoint_id, trigger_type, scheduled_window, idempotency_key,
+            status, max_attempts, correlation_id, trace_id, replay_of_job_id, requested_by
+        ) values (
+            #{id}, #{endpointId}, #{triggerType}, #{scheduledWindow}, #{idempotencyKey},
+            #{status}, #{maxAttempts}, #{correlationId}, #{traceId}, #{replayOfJobId}, #{requestedBy}
+        )
+    </insert>
+
+    <update id="scheduleNext">
+        update source.source_endpoint
+        set next_fetch_at = #{nextFetchAt}, last_fetch_job_id = #{jobId}, updated_at = now()
+        where id = #{endpointId} and status = 'ACTIVE'
+    </update>
+
+    <select id="listJobs" resultType="com.aihotspot.core.crawl.CrawlMapper$FetchJobView">
+        select j.id, j.endpoint_id, e.name as endpoint_name, s.name as source_name,
+               j.trigger_type, j.idempotency_key, j.status, j.attempt_count, j.max_attempts,
+               j.http_status, j.artifact_count, j.discovered_count, j.new_entry_count,
+               j.error_code, j.last_error, j.correlation_id, j.trace_id, j.replay_of_job_id,
+               j.started_at, j.finished_at, j.created_at, j.updated_at
+        from source.fetch_job j
+        join source.source_endpoint e on e.id = j.endpoint_id
+        join source.source_entity s on s.id = e.source_entity_id
+        <where><if test="status != null">j.status = #{status}</if></where>
+        order by j.created_at desc, j.id desc
+        limit #{limit}
+    </select>
+
+    <select id="findJob" resultType="com.aihotspot.core.crawl.CrawlMapper$FetchJobView">
+        select j.id, j.endpoint_id, e.name as endpoint_name, s.name as source_name,
+               j.trigger_type, j.idempotency_key, j.status, j.attempt_count, j.max_attempts,
+               j.http_status, j.artifact_count, j.discovered_count, j.new_entry_count,
+               j.error_code, j.last_error, j.correlation_id, j.trace_id, j.replay_of_job_id,
+               j.started_at, j.finished_at, j.created_at, j.updated_at
+        from source.fetch_job j
+        join source.source_endpoint e on e.id = j.endpoint_id
+        join source.source_entity s on s.id = e.source_entity_id
+        where j.id = #{id}
+    </select>
+
+    <select id="listDeadLetters" resultType="com.aihotspot.core.crawl.CrawlMapper$DeadLetterView">
+        select id, original_event_id, queue_name, event_type, idempotency_key,
+               aggregate_type, aggregate_id, failure_count, last_error, replay_status,
+               replayed_by, replay_event_id, first_failed_at, last_failed_at, created_at
+        from messaging.dead_letter_record
+        <where><if test="status != null">replay_status = #{status}</if></where>
+        order by last_failed_at desc, id desc
+        limit #{limit}
+    </select>
+
+    <select id="findDeadLetter" resultType="com.aihotspot.core.crawl.CrawlMapper$DeadLetterView">
+        select id, original_event_id, queue_name, event_type, idempotency_key,
+               aggregate_type, aggregate_id, failure_count, last_error, replay_status,
+               replayed_by, replay_event_id, first_failed_at, last_failed_at, created_at
+        from messaging.dead_letter_record where id = #{id}
+    </select>
+
+    <update id="resetJobForReplay">
+        update source.fetch_job
+        set status = 'QUEUED', attempt_count = 0, error_code = null, last_error = null,
+            started_at = null, finished_at = null, updated_at = now()
+        where id = #{id} and status = 'DEAD_LETTERED'
+    </update>
+
+    <update id="markDeadLetterReplayed">
+        update messaging.dead_letter_record
+        set replay_status = 'REPLAYED', replayed_by = #{actorId}, replay_event_id = #{replayEventId}
+        where id = #{id} and replay_status = 'PENDING'
+    </update>
+</mapper>

@@ -33,13 +33,16 @@ public class SourceService {
     private static final Set<String> DISPLAY_POLICIES = Set.of("FULLTEXT_ALLOWED", "SUMMARY_ONLY", "LINK_ONLY", "HIDDEN");
     private static final Set<String> INDEX_POLICIES = Set.of("PUBLIC_RAG", "PRIVATE_RAG", "METADATA_ONLY", "NO_INDEX");
     private static final Pattern SLUG = Pattern.compile("[a-z0-9]+(?:-[a-z0-9]+)*");
-    private static final Set<String> COMMON_CONFIG_KEYS = Set.of("timeoutSeconds", "maxResponseBytes", "userAgent", "respectRobots", "owner", "repository", "resource", "categories", "venueIds", "feed");
+    private static final Set<String> COMMON_CONFIG_KEYS = Set.of(
+            "timeoutSeconds", "maxResponseBytes", "userAgent", "respectRobots",
+            "maxItems", "maxAttempts", "autoPublish", "relevanceScore", "qualityScore",
+            "owner", "repository", "resource", "categories", "venueIds", "feed");
 
     private final SourceMapper mapper;
     private final AuditService audit;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
+            .connectTimeout(Duration.ofSeconds(15))
             .followRedirects(HttpClient.Redirect.NEVER)
             .build();
 
@@ -96,7 +99,7 @@ public class SourceService {
         String message;
         try {
             HttpRequest probeRequest = HttpRequest.newBuilder(uri)
-                    .timeout(Duration.ofSeconds(8))
+                    .timeout(Duration.ofSeconds(25))
                     .header("User-Agent", "AI-Hotspot-Probe/0.2 (+https://aihotspot.local)")
                     .method("HEAD", HttpRequest.BodyPublishers.noBody())
                     .build();
@@ -138,7 +141,16 @@ public class SourceService {
 
     public Map<String, Object> connectorSchemas() {
         Map<String, Object> schemas = new LinkedHashMap<>();
-        schemas.put("common", Map.of("timeoutSeconds", "integer:1..30", "maxResponseBytes", "integer:1024..10485760", "userAgent", "string", "respectRobots", "boolean"));
+        schemas.put("common", Map.ofEntries(
+                Map.entry("timeoutSeconds", "integer:1..30"),
+                Map.entry("maxResponseBytes", "integer:1024..10485760"),
+                Map.entry("userAgent", "string"),
+                Map.entry("respectRobots", "boolean"),
+                Map.entry("maxItems", "integer:1..200"),
+                Map.entry("maxAttempts", "integer:1..10"),
+                Map.entry("autoPublish", "boolean"),
+                Map.entry("relevanceScore", "number:0..100"),
+                Map.entry("qualityScore", "number:0..100")));
         schemas.put("GITHUB", Map.of("owner", "string", "repository", "string", "resource", "releases|commits|issues"));
         schemas.put("ARXIV", Map.of("categories", "string[]"));
         schemas.put("OPENREVIEW", Map.of("venueIds", "string[]"));
@@ -160,7 +172,45 @@ public class SourceService {
             disallowed.removeAll(COMMON_CONFIG_KEYS);
             if (!disallowed.isEmpty()) invalid("Connector 配置包含未知字段：" + String.join(", ", disallowed));
             if (c.config().keySet().stream().anyMatch(key -> key.toLowerCase(Locale.ROOT).contains("password") || key.toLowerCase(Locale.ROOT).contains("token") || key.toLowerCase(Locale.ROOT).contains("secret"))) invalid("敏感信息必须使用 credentialRef，不能写入 Connector 配置");
+            validateIntegerConfig(c.config(), "timeoutSeconds", 1, 30);
+            validateIntegerConfig(c.config(), "maxResponseBytes", 1024, 10485760);
+            validateIntegerConfig(c.config(), "maxItems", 1, 200);
+            validateIntegerConfig(c.config(), "maxAttempts", 1, 10);
+            validateNumberConfig(c.config(), "relevanceScore", BigDecimal.ZERO, new BigDecimal("100"));
+            validateNumberConfig(c.config(), "qualityScore", BigDecimal.ZERO, new BigDecimal("100"));
+            validateBooleanConfig(c.config(), "respectRobots");
+            validateBooleanConfig(c.config(), "autoPublish");
+            Object userAgent = c.config().get("userAgent");
+            if (userAgent != null && (!(userAgent instanceof String value) || value.isBlank() || value.length() > 200)) {
+                invalid("Connector 配置 userAgent 必须是 1 到 200 字符的字符串");
+            }
         }
+    }
+
+    private void validateIntegerConfig(Map<String, Object> config, String key, int minimum, int maximum) {
+        Object value = config.get(key);
+        if (value == null) return;
+        if (!(value instanceof Number)) invalid("Connector 配置 " + key + " 必须是整数");
+        BigDecimal decimal = new BigDecimal(((Number) value).toString());
+        if (decimal.stripTrailingZeros().scale() > 0 || decimal.compareTo(BigDecimal.valueOf(minimum)) < 0
+                || decimal.compareTo(BigDecimal.valueOf(maximum)) > 0) {
+            invalid("Connector 配置 " + key + " 必须是 " + minimum + " 到 " + maximum + " 的整数");
+        }
+    }
+
+    private void validateNumberConfig(Map<String, Object> config, String key, BigDecimal minimum, BigDecimal maximum) {
+        Object value = config.get(key);
+        if (value == null) return;
+        if (!(value instanceof Number)) invalid("Connector 配置 " + key + " 必须是数字");
+        BigDecimal decimal = new BigDecimal(((Number) value).toString());
+        if (decimal.compareTo(minimum) < 0 || decimal.compareTo(maximum) > 0) {
+            invalid("Connector 配置 " + key + " 必须在 " + minimum + " 到 " + maximum + " 之间");
+        }
+    }
+
+    private void validateBooleanConfig(Map<String, Object> config, String key) {
+        Object value = config.get(key);
+        if (value != null && !(value instanceof Boolean)) invalid("Connector 配置 " + key + " 必须是布尔值");
     }
 
     String normalizeAndValidatePublicUrl(String rawUrl) {

@@ -1,6 +1,6 @@
 # AI Hotspot
 
-AI Hotspot 是面向 AI 从业者的公开情报、研究、订阅与自动化产品。当前仓库已经完成 M0 方案与正式原型、M1 工程与基础设施、M2 身份权限与信源管理，下一阶段为 M3 RSS/Atom 真实垂直闭环。
+AI Hotspot 是面向 AI 从业者的公开情报、研究、订阅与自动化产品。当前仓库已经完成 M0 方案与正式原型、M1 工程与基础设施、M2 身份权限与信源管理、M3 RSS/Atom 真实垂直闭环，下一阶段为 M4 公开 Connector 扩展。
 
 ## 工程结构
 
@@ -69,6 +69,14 @@ Compose 已启动时，可执行 M1 端到端 Smoke：
 ./scripts/Test-M2-Smoke.ps1
 ```
 
+执行 M3 真实 RSS/Atom、增量游标、MinIO、幂等、RabbitMQ 恢复、死信回放和公开隔离 Smoke：
+
+```powershell
+./scripts/Test-M3-Smoke.ps1
+```
+
+该脚本访问 NVIDIA Developer Blog、Microsoft Research 和 AWS Machine Learning Blog 的公开 Feed，并会短暂停止后恢复本项目 RabbitMQ 容器；仅在本地验收环境执行。
+
 本地引导管理员默认使用 `.env` 中的 `BOOTSTRAP_ADMIN_EMAIL` 和 `BOOTSTRAP_ADMIN_PASSWORD`。首次启动后应立即修改生产环境凭据；邀请码明文只在创建响应中返回一次。
 
 单独执行：
@@ -95,6 +103,6 @@ docker compose --env-file .env.example config --quiet
 - 不开放公众自由注册；
 - 不支持用户自带模型密钥；
 - 不使用 Kubernetes、Kafka 或 Elasticsearch；
-- M2 已实现身份、权限、邀请和信源管理；采集、内容、事件、RAG、邮件订阅和 Agent 仍按 M3～M9 逐步实现。
+- M3 已实现 RSS/Atom 采集、原件、原始条目、基础内容准入、公开动态/精选/详情和采集监控；其余 Connector、内容质量与事件、RAG、邮件订阅和 Agent 仍按 M4～M9 逐步实现。
 
 详细进度见 [项目进度与剩余任务](./AI%20Hotspot%20项目方案/00%20项目总览/项目进度与剩余任务.md)。

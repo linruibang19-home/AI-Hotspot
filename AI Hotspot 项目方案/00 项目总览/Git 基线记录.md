@@ -2,7 +2,7 @@
 
 > 基线日期：2026-07-17
 > 基线标签：`planning-v1`
-> 后续里程碑标签：`prototype-v1`、`m1-foundation-v1`
+> 后续里程碑标签：`prototype-v1`、`m1-foundation-v1`、`m2-identity-sources-v1`、`m3-rss-vertical-slice-v1`
 
 ## 1. 仓库
 
@@ -46,11 +46,14 @@ git remote -v
 
 下一阶段方案详细设计应从 `main` 创建 `docs/<主题>` 分支；原型修改应创建 `prototype/<页面或阶段>` 分支。未经产品负责人审核，不把结构性原型修改直接提交到 `main`。
 
-## 6. M0 与 M1 Git 记录
+## 6. 里程碑 Git 记录
 
 - `planning-v1`：原始材料与中文方案基线；
 - `prototype-v1`：正式原型及 M0 浏览器验收；
 - `feat/m1-foundation`：M1 工程任务分支；
 - `b308020`：M1 工程、基础设施、测试与运行脚本实现提交；
 - `m1-foundation-v1`：M1 方案记录与验收完成后的本地里程碑标签；
+- `m2-identity-sources-v1`：M2 身份权限与信源管理本地里程碑标签；
+- `feat/m3-rss-vertical-slice`：M3 实现与验收任务分支；
+- `m3-rss-vertical-slice-v1`：M3 合并 `main` 后创建的本地里程碑标签；
 - 未配置 Git Remote，未 push、未创建远程 PR、未部署生产。

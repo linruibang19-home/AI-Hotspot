@@ -127,6 +127,12 @@ services:
       DATABASE_URL: ${AI_DATABASE_URL:-postgresql+psycopg://ai_hotspot:ai_hotspot@postgres:5432/ai_hotspot}
       REDIS_URL: redis://:${REDIS_PASSWORD:-ai_hotspot}@redis:6379/0
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-ai_hotspot}:${RABBITMQ_DEFAULT_PASS:-ai_hotspot}@rabbitmq:5672/${RABBITMQ_DEFAULT_VHOST:-ai_hotspot}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-ai_hotspot}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-ai_hotspot-local-password}
+      MINIO_BUCKET: ${MINIO_BUCKET:-fetch-artifacts}
+      CRAWL_RETRY_DELAY_MS: ${CRAWL_RETRY_DELAY_MS:-2000}
+      CONTENT_RETRY_DELAY_MS: ${CONTENT_RETRY_DELAY_MS:-2000}
       GENERATION_PROVIDER: ${GENERATION_PROVIDER:-mock}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-mock}
       RERANK_PROVIDER: ${RERANK_PROVIDER:-mock}
@@ -155,6 +161,8 @@ services:
       OUTBOX_ENABLED: ${OUTBOX_ENABLED:-true}
       OUTBOX_FIXED_DELAY_MS: ${OUTBOX_FIXED_DELAY_MS:-1000}
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
+      CRAWL_SCHEDULER_ENABLED: ${CRAWL_SCHEDULER_ENABLED:-true}
+      CRAWL_SCHEDULER_FIXED_DELAY_MS: ${CRAWL_SCHEDULER_FIXED_DELAY_MS:-10000}
       MAIL_PROVIDER: ${MAIL_PROVIDER:-smtp}
       MAIL_FROM: ${MAIL_FROM:-AI Hotspot <no-reply@ai-hotspot.local>}
       SMTP_HOST: ${SMTP_HOST:-mailpit}

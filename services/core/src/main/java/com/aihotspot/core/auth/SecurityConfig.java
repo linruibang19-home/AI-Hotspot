@@ -44,7 +44,7 @@ public class SecurityConfig {
                 .csrf(configurer -> configurer.csrfTokenRepository(csrf))
                 .sessionManagement(session -> session.sessionFixation(fixation -> fixation.migrateSession()))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/v1/health", "/actuator/health/**").permitAll()
+                        .requestMatchers("/api/v1/health", "/actuator/health/**", "/api/v1/public/**").permitAll()
                         .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/login", "/api/v1/auth/invitations/*/register").permitAll()
                         .requestMatchers("/api/v1/system/smoke/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/admin/**").authenticated()

@@ -90,6 +90,9 @@ ai-hotspot:
     enabled: ${OUTBOX_ENABLED:true}
     fixed-delay: ${OUTBOX_FIXED_DELAY_MS:1000}
     batch-size: ${OUTBOX_BATCH_SIZE:20}
+  crawl:
+    scheduler-enabled: ${CRAWL_SCHEDULER_ENABLED:true}
+    scheduler-fixed-delay: ${CRAWL_SCHEDULER_FIXED_DELAY_MS:30000}
   mail:
     provider: ${MAIL_PROVIDER:mock}
     from: ${MAIL_FROM:AI Hotspot <no-reply@ai-hotspot.local>}
