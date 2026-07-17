@@ -49,8 +49,8 @@
         ) on conflict (catalog_key) where catalog_key is not null do nothing
     </insert>
 
-    <select id="findIdBySlug" resultType="java.util.UUID">
-        select id from source.source_entity where slug = #{slug}
+    <select id="findIdBySlug" resultType="java.lang.String">
+        select id::text from source.source_entity where slug = #{slug}
     </select>
 
     <select id="findById" resultType="com.aihotspot.core.source.SourceMapper$SourceDetail">
@@ -111,10 +111,10 @@
     </select>
 
     <select id="metrics" resultType="com.aihotspot.core.source.SourceMapper$SourceMetrics">
-        select count(*) as total_endpoints,
-               count(*) filter (where status = 'ACTIVE') as active_endpoints,
-               count(*) filter (where health_status = 'HEALTHY') as healthy_endpoints,
-               count(*) filter (where health_status in ('WARNING', 'FAILED')) as attention_endpoints,
+        select count(*) filter (where catalog_kind &lt;&gt; 'TEST') as total_endpoints,
+               count(*) filter (where catalog_kind &lt;&gt; 'TEST' and status = 'ACTIVE') as active_endpoints,
+               count(*) filter (where catalog_kind &lt;&gt; 'TEST' and health_status = 'HEALTHY') as healthy_endpoints,
+               count(*) filter (where catalog_kind &lt;&gt; 'TEST' and health_status in ('WARNING', 'FAILED')) as attention_endpoints,
                count(*) filter (where catalog_kind = 'PRODUCTION') as production_endpoints,
                count(*) filter (where catalog_kind = 'TEST') as test_endpoints
         from source.source_endpoint

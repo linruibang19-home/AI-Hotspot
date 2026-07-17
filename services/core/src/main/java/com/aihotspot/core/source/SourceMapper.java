@@ -13,7 +13,7 @@ public interface SourceMapper {
     int insertEntityIfAbsent(SourceEntity entity);
     int insertEndpoint(SourceEndpoint endpoint);
     int insertEndpointIfAbsent(SourceEndpoint endpoint);
-    UUID findIdBySlug(@Param("slug") String slug);
+    String findIdBySlug(@Param("slug") String slug);
     SourceDetail findById(@Param("id") UUID id);
     EndpointDetail findEndpointById(@Param("id") UUID id);
     List<SourceSummary> list(@Param("status") String status, @Param("query") String query, @Param("limit") int limit);

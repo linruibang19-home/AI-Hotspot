@@ -62,7 +62,7 @@ public class SourceCatalogInitializer implements ApplicationRunner {
                     proposedSourceId, item.sourceName(), item.slug(), item.entityType(),
                     item.countryCode(), item.officialLevel(), item.authorityScore(),
                     item.websiteUrl(), null, "ACTIVE", 0, owner.id()));
-            UUID sourceId = sourceMapper.findIdBySlug(item.slug());
+            UUID sourceId = UUID.fromString(sourceMapper.findIdBySlug(item.slug()));
             UUID endpointId = stableId("endpoint:" + item.catalogKey());
             inserted += sourceMapper.insertEndpointIfAbsent(new SourceMapper.SourceEndpoint(
                     endpointId, sourceId, item.endpointName(), item.endpointUrl(), item.endpointUrl(),

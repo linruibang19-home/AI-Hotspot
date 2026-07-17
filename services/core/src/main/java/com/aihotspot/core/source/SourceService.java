@@ -37,7 +37,7 @@ public class SourceService {
             "timeoutSeconds", "maxResponseBytes", "userAgent", "respectRobots",
             "maxItems", "maxAttempts", "autoPublish", "relevanceScore", "qualityScore",
             "owner", "repository", "resource", "categories", "venueIds", "feed",
-            "query", "urlPattern", "minScore", "maxAgeHours");
+            "query", "urlPattern", "minScore", "maxAgeHours", "testRun");
 
     private final SourceMapper mapper;
     private final AuditService audit;
@@ -67,7 +67,8 @@ public class SourceService {
                 endpointId, sourceId, command.endpointName().strip(), command.endpointUrl().strip(), normalizedUrl,
                 command.endpointType(), command.endpointType(), blankToNull(command.language()), command.pollingIntervalSeconds(),
                 command.displayPolicy(), command.indexPolicy(), command.authorityOverride(), json(command.config()), null,
-                "DRAFT", "UNKNOWN", 0, 0, actor.id(), "USER_MANAGED", null));
+                "DRAFT", "UNKNOWN", 0, 0, actor.id(),
+                Boolean.TRUE.equals(command.config().get("testRun")) ? "TEST" : "USER_MANAGED", null));
         audit.record(actor.id(), "SOURCE_CREATED", "SOURCE_ENTITY", sourceId, null,
                 json(Map.of("name", command.name(), "endpointId", endpointId, "endpointType", command.endpointType(), "url", normalizedUrl)), request);
         return new CreatedSource(sourceId, endpointId);
@@ -194,6 +195,7 @@ public class SourceService {
             validateNumberConfig(c.config(), "minScore", BigDecimal.ZERO, new BigDecimal("1000000"));
             validateBooleanConfig(c.config(), "respectRobots");
             validateBooleanConfig(c.config(), "autoPublish");
+            validateBooleanConfig(c.config(), "testRun");
             Object userAgent = c.config().get("userAgent");
             if (userAgent != null && (!(userAgent instanceof String value) || value.isBlank() || value.length() > 200)) {
                 invalid("Connector 配置 userAgent 必须是 1 到 200 字符的字符串");

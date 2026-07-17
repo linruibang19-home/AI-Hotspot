@@ -6,6 +6,7 @@
                status, config::text as config_json, next_fetch_at
         from source.source_endpoint
         where status = 'ACTIVE'
+          and catalog_kind &lt;&gt; 'TEST'
           and endpoint_type in (
               'RSS', 'ATOM', 'WEBSITE', 'SITEMAP', 'GITHUB',
               'HUGGING_FACE', 'ARXIV', 'OPENREVIEW', 'HACKER_NEWS'
