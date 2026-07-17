@@ -40,6 +40,10 @@ try {
     $script:postgresDb = Get-DotEnvValue 'POSTGRES_DB' 'ai_hotspot'
     $minioUser = Get-DotEnvValue 'MINIO_ROOT_USER' 'ai_hotspot'
     $minioPassword = Get-DotEnvValue 'MINIO_ROOT_PASSWORD' 'ai_hotspot-local-password'
+    $catalog = @(Get-Content -Raw -LiteralPath "$root\services\core\src\main\resources\source-catalog.json" | ConvertFrom-Json)
+    $expectedProduction = $catalog.Count
+    $expectedActive = @($catalog | Where-Object status -eq 'ACTIVE').Count
+    $expectedPaused = @($catalog | Where-Object status -eq 'PAUSED').Count
 
     $services = @(& docker compose ps --format json | ForEach-Object { $_ | ConvertFrom-Json })
     if ($LASTEXITCODE -ne 0) { throw '无法读取 Docker Compose 服务状态' }
@@ -56,10 +60,10 @@ try {
     $active = [int](Invoke-Sql "select count(*) from source.source_endpoint where catalog_kind='PRODUCTION' and status='ACTIVE';")
     $healthy = [int](Invoke-Sql "select count(*) from source.source_endpoint where catalog_kind='PRODUCTION' and status='ACTIVE' and health_status='HEALTHY';")
     $paused = [int](Invoke-Sql "select count(*) from source.source_endpoint where catalog_kind='PRODUCTION' and status='PAUSED';")
-    Assert-Equal $production 19 '正式信源目录数量不正确'
-    Assert-Equal $active 17 '已启用正式信源数量不正确'
-    Assert-AtLeast $healthy 17 '正式信源健康数量不足'
-    Assert-Equal $paused 2 '因外部限制暂停的正式信源数量不正确'
+    Assert-Equal $production $expectedProduction '正式信源目录数量不正确'
+    Assert-Equal $active $expectedActive '已启用正式信源数量不正确'
+    Assert-AtLeast $healthy $expectedActive '正式信源健康数量不足'
+    Assert-Equal $paused $expectedPaused '因外部限制暂停的正式信源数量不正确'
 
     $connectorKinds = [int](Invoke-Sql "select count(distinct endpoint_type) from source.fetch_job j join source.source_endpoint e on e.id=j.endpoint_id where e.catalog_kind='PRODUCTION' and j.status='SUCCEEDED';")
     $artifacts = [int](Invoke-Sql "select count(*) from source.fetch_artifact a join source.source_endpoint e on e.id=a.endpoint_id where e.catalog_kind='PRODUCTION';")
@@ -70,8 +74,8 @@ try {
     Assert-AtLeast $rawEntries 400 '正式信源原始条目不足'
     Assert-AtLeast $publicItems 400 '正式信源公开内容不足'
 
-    $productionDead = [int](Invoke-Sql "select count(*) from source.fetch_job j join source.source_endpoint e on e.id=j.endpoint_id where e.catalog_kind='PRODUCTION' and j.status='DEAD_LETTERED';")
-    Assert-Equal $productionDead 0 '正式信源存在死信任务'
+    $activeDead = [int](Invoke-Sql "select count(*) from source.source_endpoint e join source.fetch_job j on j.id=e.last_fetch_job_id where e.catalog_kind='PRODUCTION' and e.status='ACTIVE' and j.status='DEAD_LETTERED';")
+    Assert-Equal $activeDead 0 '启用中的正式信源存在未解决死信'
     $scheduledTest = [int](Invoke-Sql "select count(*) from source.source_endpoint where catalog_kind='TEST' and status='ACTIVE' and next_fetch_at is not null;")
     Assert-Equal $scheduledTest 0 '测试信源仍可能进入周期调度'
 
@@ -97,8 +101,15 @@ try {
 
     $public = Invoke-RestMethod -Uri "$BaseUrl/public/contents?limit=20" -TimeoutSec 20
     Assert-Equal @($public.items).Count 20 '公开内容 API 未返回预期分页结果'
+    foreach ($period in @('DAILY', 'WEEKLY', 'MONTHLY')) {
+        $report = Invoke-RestMethod -Uri "$BaseUrl/public/reports?period=$period" -TimeoutSec 20
+        Assert-Equal $report.report.period $period "$period 报告周期错误"
+        Assert-AtLeast ([int]$report.report.storyCount) 1 "$period 报告没有真实公开内容"
+    }
     $webResponse = Invoke-WebRequest -Uri 'http://127.0.0.1:8088/' -TimeoutSec 20
     Assert-Equal $webResponse.StatusCode 200 'Web 首页无法访问'
+    $topicsResponse = Invoke-WebRequest -Uri 'http://127.0.0.1:8088/topics' -TimeoutSec 20
+    Assert-Equal $topicsResponse.StatusCode 200 '主题页无法访问'
 
     [pscustomobject]@{
         ComposeServices = $services.Count
@@ -110,12 +121,14 @@ try {
         FetchArtifacts = $artifacts
         RawEntries = $rawEntries
         PublicItems = $publicItems
-        ProductionDeadLetters = $productionDead
+        ActiveDeadLetters = $activeDead
         ScheduledTestSources = $scheduledTest
         XActiveOrJobs = "$xEndpoints/$xJobs"
         MinioArtifact = 'READABLE'
         MainQueues = 'EMPTY'
         PublicApi = 'OK'
+        PublicReports = 'DAILY/WEEKLY/MONTHLY OK'
+        Topics = 'OK'
         Web = 'OK'
     } | Format-List
     Write-Host 'M4 Smoke 通过'

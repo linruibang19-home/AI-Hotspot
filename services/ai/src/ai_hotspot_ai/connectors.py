@@ -30,7 +30,7 @@ def parse_connector(
     endpoint_type: str, content: bytes, base_url: str, config: dict[str, object], max_items: int
 ) -> list[FeedEntry]:
     if endpoint_type in FEED_TYPES:
-        return parse_feed(content, base_url, max_items)
+        return _filter_entries(parse_feed(content, base_url, max_items), config)
     parsers = {
         "SITEMAP": lambda: _parse_sitemap(content, base_url, config, max_items),
         "WEBSITE": lambda: _parse_website(content, base_url, config, max_items),
@@ -46,7 +46,7 @@ def parse_connector(
             f"Connector {endpoint_type} is not available",
             retryable=False,
         )
-    return parser()
+    return _filter_entries(parser(), config)
 
 
 def _parse_sitemap(
@@ -150,9 +150,14 @@ def _parse_github(content: bytes, base_url: str, max_items: int) -> list[FeedEnt
     for row in rows[:max_items]:
         if not isinstance(row, dict):
             continue
+        commit = row.get("commit") if isinstance(row.get("commit"), dict) else {}
+        title_value = row.get("name") or row.get("tag_name") or commit.get("sha")
+        title = strip_markup(str(title_value or ""), 600)
         url = canonicalize_url(row.get("html_url"), base_url)
-        external = str(row.get("id") or row.get("tag_name") or url or "")
-        title = strip_markup(str(row.get("name") or row.get("tag_name") or ""), 600)
+        if not url and row.get("name") and "/tags" in base_url:
+            repository_url = base_url.split("/repos/", 1)[-1].split("/tags", 1)[0]
+            url = f"https://github.com/{repository_url}/releases/tag/{row['name']}"
+        external = str(row.get("id") or row.get("tag_name") or commit.get("sha") or url or "")
         if not external or not title:
             continue
         author = row.get("author") if isinstance(row.get("author"), dict) else {}
@@ -168,6 +173,30 @@ def _parse_github(content: bytes, base_url: str, max_items: int) -> list[FeedEnt
             )
         )
     return _require_entries(entries, "GitHub response contains no releases")
+
+
+def _filter_entries(entries: list[FeedEntry], config: dict[str, object]) -> list[FeedEntry]:
+    raw_keywords = config.get("includeKeywords")
+    if not isinstance(raw_keywords, list) or not raw_keywords:
+        return entries
+    keywords = [str(value).strip().casefold() for value in raw_keywords if str(value).strip()]
+    if not keywords:
+        return entries
+    filtered = [
+        entry
+        for entry in entries
+        if any(
+            _matches_keyword(f"{entry.title} {entry.summary or ''}", keyword)
+            for keyword in keywords
+        )
+    ]
+    return _require_entries(filtered, "Connector result contains no configured keywords")
+
+
+def _matches_keyword(text: str, keyword: str) -> bool:
+    if keyword.isascii() and keyword.isalnum() and len(keyword) <= 3:
+        return re.search(rf"(?<![a-z0-9]){re.escape(keyword)}(?![a-z0-9])", text, re.I) is not None
+    return keyword in text.casefold()
 
 
 def _parse_hugging_face(content: bytes, base_url: str, max_items: int) -> list[FeedEntry]:
