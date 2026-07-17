@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { PageHeader } from "@/components/page-header";
 import { ApiError, apiFetch } from "@/lib/api";
@@ -9,15 +9,16 @@ import { ApiError, apiFetch } from "@/lib/api";
 type SourceItem = {
   id: string; name: string; slug: string; entityType: string; officialLevel: string;
   authorityScore: number; sourceStatus: string; endpointId: string; endpointName: string;
-  endpointType: string; endpointUrl: string; endpointStatus: string; healthStatus: string;
-  endpointVersion: number; updatedAt: string;
+  endpointType: string; connectorType: string; endpointUrl: string; endpointStatus: string;
+  catalogKind: "PRODUCTION" | "TEST" | "USER_MANAGED"; healthStatus: string;
+  endpointVersion: number; lastFetchItemCount: number; todayContentCount: number; updatedAt: string;
 };
 type SourceResponse = {
-  metrics: { totalEndpoints: number; activeEndpoints: number; healthyEndpoints: number; attentionEndpoints: number };
+  metrics: { totalEndpoints: number; activeEndpoints: number; healthyEndpoints: number; attentionEndpoints: number; productionEndpoints: number; testEndpoints: number };
   items: SourceItem[];
 };
 
-const EMPTY: SourceResponse = { metrics: { totalEndpoints: 0, activeEndpoints: 0, healthyEndpoints: 0, attentionEndpoints: 0 }, items: [] };
+const EMPTY: SourceResponse = { metrics: { totalEndpoints: 0, activeEndpoints: 0, healthyEndpoints: 0, attentionEndpoints: 0, productionEndpoints: 0, testEndpoints: 0 }, items: [] };
 
 export default function AdminSourcesPage() {
   const { user, loading: authLoading } = useAuth();
@@ -25,6 +26,8 @@ export default function AdminSourcesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [catalogKind, setCatalogKind] = useState<"PRODUCTION" | "USER_MANAGED" | "TEST" | "ALL">("PRODUCTION");
+  const [connectorType, setConnectorType] = useState("ALL");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState("");
@@ -92,6 +95,12 @@ export default function AdminSourcesPage() {
   }
 
   const allowed = user?.roles.some((role) => role === "ADMIN" || role === "OPERATOR");
+  const visibleItems = useMemo(() => data.items.filter((item) => {
+    const catalogMatches = catalogKind === "ALL" || item.catalogKind === catalogKind;
+    const connectorMatches = connectorType === "ALL" || item.endpointType === connectorType ||
+      (connectorType === "FEED" && ["RSS", "ATOM"].includes(item.endpointType));
+    return catalogMatches && connectorMatches;
+  }), [catalogKind, connectorType, data.items]);
   if (!authLoading && !user) return <PermissionState title="需要登录" detail="信源管理只对 ADMIN 和 OPERATOR 开放。" login />;
   if (!authLoading && !allowed) return <PermissionState title="没有管理权限" detail="普通用户不能查看或修改信源。" />;
 
@@ -99,19 +108,20 @@ export default function AdminSourcesPage() {
     <div className="page-shell">
       <PageHeader title="信源管理" description="统一维护 SourceEntity、Endpoint、采集策略、权威分与正文展示政策。" action={<button className="button primary" type="button" onClick={() => setDialogOpen(true)}>＋ 新增信源</button>} />
       <section className="metric-grid" aria-label="信源概览">
-        {[[data.metrics.totalEndpoints, "全部 Endpoint"], [data.metrics.activeEndpoints, "已启用"], [data.metrics.healthyEndpoints, "健康运行"], [data.metrics.attentionEndpoints, "需要关注"]].map(([value, label]) => <div className="metric-card" key={label}><strong>{value}</strong><span>{label}</span></div>)}
+        {[[data.metrics.productionEndpoints, "正式目录"], [data.metrics.activeEndpoints, "已启用"], [data.metrics.healthyEndpoints, "健康运行"], [data.metrics.testEndpoints, "测试记录"]].map(([value, label]) => <div className="metric-card" key={label}><strong>{value}</strong><span>{label}</span></div>)}
       </section>
       <form className="admin-toolbar" onSubmit={(event) => { event.preventDefault(); void load(query); }}>
-        <div className="tabs"><button className="tab active" type="button">全部</button><button className="tab" type="button" onClick={() => void load("RSS")}>RSS / Atom</button><button className="tab" type="button" onClick={() => void load("GitHub")}>公开平台</button></div>
+        <div className="tabs" aria-label="信源目录筛选">{[["PRODUCTION", "正式目录"], ["USER_MANAGED", "用户添加"], ["TEST", "测试数据"], ["ALL", "全部"]].map(([value, label]) => <button className={`tab ${catalogKind === value ? "active" : ""}`} type="button" key={value} onClick={() => setCatalogKind(value as typeof catalogKind)}>{label}</button>)}</div>
+        <select aria-label="Connector 类型" value={connectorType} onChange={(event) => setConnectorType(event.target.value)}><option value="ALL">全部 Connector</option><option value="FEED">RSS / Atom</option><option value="WEBSITE">Website</option><option value="SITEMAP">Sitemap</option><option value="GITHUB">GitHub</option><option value="HUGGING_FACE">Hugging Face</option><option value="ARXIV">arXiv</option><option value="OPENREVIEW">OpenReview</option><option value="HACKER_NEWS">Hacker News</option></select>
         <div className="search-shell"><input aria-label="搜索信源" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索主体或 Endpoint..." /><button className="search-button" type="submit">搜索</button></div>
       </form>
       {notice ? <div className="notice success" role="status">{notice}</div> : null}
       {error ? <div className="notice error" role="alert">{error}</div> : null}
-      {loading ? <div className="source-list"><div className="source-row skeleton" /><div className="source-row skeleton" /></div> : data.items.length ? (
+      {loading ? <div className="source-list"><div className="source-row skeleton" /><div className="source-row skeleton" /></div> : visibleItems.length ? (
         <section className="source-list" aria-label="信源列表">
-          {data.items.map((item) => <article className="source-row" key={item.endpointId}>
-            <div className="source-main"><div className="source-title"><Link href={`/admin/sources/${item.id}`}>{item.name}</Link><span className={`status-badge ${item.healthStatus.toLowerCase()}`}>{item.healthStatus}</span></div><p>{item.endpointName} · {item.endpointUrl}</p><div className="source-meta"><span>{item.endpointType}</span><span>{item.officialLevel}</span><span>权威分 {item.authorityScore}</span><span>状态 {item.endpointStatus}</span></div></div>
-            <div className="row-actions"><button className="button" type="button" onClick={() => void endpointAction(item, "probe")}>试抓取</button>{item.endpointStatus === "ACTIVE" ? <button className="button" type="button" onClick={() => void endpointAction(item, "pause")}>暂停</button> : <button className="button primary" type="button" onClick={() => void endpointAction(item, "activate")}>启用</button>}</div>
+          {visibleItems.map((item) => <article className="source-row" key={item.endpointId}>
+            <div className="source-main"><div className="source-title"><Link href={`/admin/sources/${item.id}`}>{item.name}</Link><span className={`status-badge ${item.healthStatus.toLowerCase()}`}>{item.healthStatus}</span></div><p>{item.endpointName} · {item.endpointUrl}</p><div className="source-meta"><span>{item.connectorType}</span><span>{item.catalogKind === "PRODUCTION" ? "正式目录" : item.catalogKind === "TEST" ? "测试数据" : "用户添加"}</span><span>{item.officialLevel}</span><span>权威分 {item.authorityScore}</span><span>状态 {item.endpointStatus}</span><span>今日 {item.todayContentCount} 条</span></div></div>
+            <div className="row-actions">{item.endpointType === "X" ? <span className="status-badge warning">仅预留</span> : <><button className="button" type="button" onClick={() => void endpointAction(item, "probe")}>试抓取</button>{item.endpointStatus === "ACTIVE" ? <button className="button" type="button" onClick={() => void endpointAction(item, "pause")}>暂停</button> : <button className="button primary" type="button" onClick={() => void endpointAction(item, "activate")}>启用</button>}</>}</div>
           </article>)}
         </section>
       ) : <div className="empty-state panel"><h2>还没有信源</h2><p>先新增一个公开 Endpoint，完成试抓取后再启用。</p><button className="button primary" type="button" onClick={() => setDialogOpen(true)}>新增第一个信源</button></div>}

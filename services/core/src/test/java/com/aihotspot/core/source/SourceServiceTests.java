@@ -32,8 +32,8 @@ class SourceServiceTests {
                 UUID.randomUUID(), now, now);
         SourceMapper.SourceSummary endpoint = new SourceMapper.SourceSummary(
                 sourceId, "Example", "example", "MEDIA", "OFFICIAL", BigDecimal.valueOf(80),
-                "DRAFT", endpointId, "Website", "WEBSITE", "https://example.com", "ACTIVE",
-                "HEALTHY", now, null, 2, now);
+                "DRAFT", endpointId, "Website", "WEBSITE", "WEBSITE", "https://example.com", "ACTIVE",
+                "USER_MANAGED", "HEALTHY", now, null, 2, 0, 0, now);
         when(mapper.findById(sourceId)).thenReturn(source);
         when(mapper.listBySourceId(sourceId)).thenReturn(List.of(endpoint));
 
@@ -63,5 +63,31 @@ class SourceServiceTests {
                     assertThat(exception.code()).isEqualTo("INVALID_SOURCE");
                     assertThat(exception.getMessage()).contains("maxItems");
                 });
+    }
+
+    @Test
+    void xConnectorContractIsVisibleButCannotBeProbedOrActivated() {
+        SourceMapper mapper = mock(SourceMapper.class);
+        UUID endpointId = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Instant now = Instant.now();
+        when(mapper.findEndpointById(endpointId)).thenReturn(new SourceMapper.EndpointDetail(
+                endpointId, sourceId, "Reserved X", "https://x.com/example", "https://x.com/example",
+                "X", "X", "en", 3600, "LINK_ONLY", "NO_INDEX", null, "{}", null,
+                "DRAFT", "UNKNOWN", null, null, 0, null, null, 3, actorId,
+                "USER_MANAGED", null, now, now));
+        SourceService service = new SourceService(mapper, mock(AuditService.class), mock(ObjectMapper.class));
+        AppUserPrincipal actor = new AppUserPrincipal(
+                actorId, "admin@example.com", "Admin", "hash", "ACTIVE",
+                List.of("ADMIN"), List.of("source:probe", "source:activate"));
+
+        assertThat(service.connectorSchemas().get("X").toString()).contains("RESERVED");
+        assertThatThrownBy(() -> service.probe(endpointId, 3, actor, mock(HttpServletRequest.class)))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("CONNECTOR_RESERVED"));
+        assertThatThrownBy(() -> service.changeStatus(endpointId, "ACTIVE", 3, actor, mock(HttpServletRequest.class)))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("CONNECTOR_RESERVED"));
     }
 }

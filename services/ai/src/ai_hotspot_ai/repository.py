@@ -313,7 +313,7 @@ def persist_feed(
                     index_policy, policy_snapshot
                 )
                 select i.id, r.id, %s, %s, r.original_url, r.canonical_url,
-                       r.raw_title, 'ARTICLE', %s, %s, r.source_published_at,
+                       r.raw_title, %s, %s, %s, r.source_published_at,
                        %s, %s, %s
                 from incoming i
                 join source.raw_entry r on r.id = i.raw_entry_id
@@ -324,11 +324,12 @@ def persist_feed(
                     Jsonb(content_rows),
                     context.source_entity_id,
                     context.endpoint_id,
+                    _content_type(context.endpoint_type),
                     context.source_type,
                     context.source_official_level,
                     context.display_policy,
                     context.index_policy,
-                    Jsonb({"endpointConfig": context.config, "version": "m3-v1"}),
+                    Jsonb({"endpointConfig": context.config, "version": "m4-v1"}),
                 ),
             )
             created_content = cursor.fetchall()
@@ -380,7 +381,7 @@ def _append_content_events(cursor: psycopg.Cursor, context: FetchContext, rows: 
             "correlationId": str(context.correlation_id),
             "traceId": str(context.trace_id),
             "occurredAt": now.isoformat(),
-            "producer": "rss-crawl-worker",
+            "producer": "connector-worker",
             "payload": {"contentItemId": str(content_id), "rawEntryId": str(raw_entry_id)},
         }
         events.append(
@@ -597,3 +598,11 @@ def _insert_dead_letter(
 
 class AlreadyCompleted(RuntimeError):
     pass
+
+
+def _content_type(endpoint_type: str) -> str:
+    if endpoint_type in {"ARXIV", "OPENREVIEW", "HUGGING_FACE"}:
+        return "RESEARCH"
+    if endpoint_type == "GITHUB":
+        return "RELEASE"
+    return "ARTICLE"

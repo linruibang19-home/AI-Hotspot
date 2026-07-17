@@ -31,6 +31,7 @@ class FetchRequest:
     timeout_seconds: int
     max_response_bytes: int
     user_agent: str
+    accept: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,7 +113,8 @@ def validate_public_url(value: str) -> None:
 
 def fetch_feed(request: FetchRequest) -> FetchResponse:
     headers = {
-        "Accept": "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9",
+        "Accept": request.accept
+        or "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9",
         "User-Agent": request.user_agent,
     }
     if request.etag:
