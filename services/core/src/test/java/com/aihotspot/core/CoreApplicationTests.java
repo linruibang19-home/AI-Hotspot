@@ -1,11 +1,16 @@
 package com.aihotspot.core;
 
+import javax.sql.DataSource;
+
+import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -18,8 +23,20 @@ class CoreApplicationTests {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private DataSource dataSource;
+
+    @Autowired
+    private SqlSessionFactory sqlSessionFactory;
+
     @Test
     void contextLoads() {
+    }
+
+    @Test
+    void myBatisUsesTheSpringManagedDataSource() {
+        assertNotNull(sqlSessionFactory);
+        assertSame(dataSource, sqlSessionFactory.getConfiguration().getEnvironment().getDataSource());
     }
 
     @Test
