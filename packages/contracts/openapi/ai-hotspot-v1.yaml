@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: AI Hotspot Core API
-  version: 0.4.0
-  description: M4 身份、正式信源目录、公开 Connector、死信回放与公开内容接口契约。
+  version: 0.4.1
+  description: M4 身份、正式信源目录、公开 Connector、死信回放、公开内容与实时报告接口契约。
 servers:
   - url: /api/core
 tags:
@@ -361,6 +361,18 @@ paths:
       responses:
         "200": { description: 公开内容详情, content: { application/json: { schema: { $ref: "#/components/schemas/PublicContent" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/public/reports:
+    get:
+      tags: [PublicContent]
+      operationId: getPublicReport
+      description: 按上海时区从已准入公开内容实时聚合日报、周报或月报。
+      security: []
+      parameters:
+        - { name: period, in: query, schema: { type: string, enum: [DAILY, WEEKLY, MONTHLY], default: DAILY } }
+        - { name: anchor, in: query, schema: { type: string, format: date } }
+      responses:
+        "200": { description: 实时报告及归档, content: { application/json: { schema: { $ref: "#/components/schemas/PublicReportResponse" } } } }
+        "422": { description: 不支持的报告周期 }
   /api/v1/system/smoke/outbox:
     post:
       tags: [System]
@@ -633,3 +645,69 @@ components:
         items: { type: array, items: { $ref: "#/components/schemas/PublicContent" } }
         nextCursor: { type: [string, "null"] }
         hasMore: { type: boolean }
+    PublicReportResponse:
+      type: object
+      required: [report, archive]
+      properties:
+        report: { $ref: "#/components/schemas/PublicReport" }
+        archive:
+          type: array
+          items: { $ref: "#/components/schemas/PublicReportArchive" }
+    PublicReport:
+      type: object
+      required: [period, periodLabel, volume, startDate, endDate, headline, lead, storyCount, sourceCount, officialSourceCount, featuredCount, estimatedMinutes, highlights, sections]
+      properties:
+        period: { type: string, enum: [DAILY, WEEKLY, MONTHLY] }
+        periodLabel: { type: string }
+        volume: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        headline: { type: string }
+        lead: { type: string }
+        storyCount: { type: integer, minimum: 0 }
+        sourceCount: { type: integer, minimum: 0 }
+        officialSourceCount: { type: integer, minimum: 0 }
+        featuredCount: { type: integer, minimum: 0 }
+        estimatedMinutes: { type: integer, minimum: 0 }
+        highlights:
+          type: array
+          items: { $ref: "#/components/schemas/PublicReportHighlight" }
+        sections:
+          type: array
+          items: { $ref: "#/components/schemas/PublicReportSection" }
+    PublicReportArchive:
+      type: object
+      required: [anchorDate, storyCount]
+      properties:
+        anchorDate: { type: string, format: date }
+        storyCount: { type: integer, minimum: 0 }
+        leadTitle: { type: [string, "null"] }
+    PublicReportHighlight:
+      type: object
+      required: [code, label, displayedCount]
+      properties:
+        code: { type: string }
+        label: { type: string }
+        displayedCount: { type: integer, minimum: 0 }
+        leadTitle: { type: [string, "null"] }
+    PublicReportSection:
+      type: object
+      required: [code, label, items]
+      properties:
+        code: { type: string }
+        label: { type: string }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PublicReportItem" }
+    PublicReportItem:
+      type: object
+      required: [id, title, sourceName, sourceOfficialLevel, contentType, publishedAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        summary: { type: [string, "null"] }
+        sourceName: { type: string }
+        sourceOfficialLevel: { type: string, enum: [OFFICIAL, FIRST_PARTY, THIRD_PARTY] }
+        contentType: { type: string }
+        finalScore: { type: [number, "null"], minimum: 0, maximum: 100 }
+        publishedAt: { type: string, format: date-time }

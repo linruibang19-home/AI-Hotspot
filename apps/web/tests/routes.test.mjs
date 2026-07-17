@@ -7,6 +7,9 @@ const expectedPages = [
   "src/app/all/page.tsx",
   "src/app/content/[id]/page.tsx",
   "src/app/reports/page.tsx",
+  "src/app/daily/page.tsx",
+  "src/app/weekly/page.tsx",
+  "src/app/monthly/page.tsx",
   "src/app/topics/page.tsx",
   "src/app/favorites/page.tsx",
   "src/app/subscriptions/page.tsx",
@@ -59,4 +62,24 @@ test("M3 public feeds use the real public content API", () => {
   assert.match(all, /getPublicContents/);
   assert.match(api, /\/api\/v1\/public\/contents/);
   assert.doesNotMatch(featured, /featuredItems/);
+});
+
+test("report routes render the real Core report API", () => {
+  const page = readFileSync("src/app/reports/page.tsx", "utf8");
+  const api = readFileSync("src/lib/public-report.ts", "utf8");
+  const view = readFileSync("src/components/report-view.tsx", "utf8");
+  assert.match(page, /getPublicReport/);
+  assert.match(api, /\/api\/v1\/public\/reports/);
+  assert.match(view, /report\.storyCount/);
+  assert.doesNotMatch(view, /\b(?:688|919|148)\b/);
+});
+
+test("topic cards navigate to real public-content filters", () => {
+  const page = readFileSync("src/app/topics/page.tsx", "utf8");
+  const topics = readFileSync("src/lib/topics.ts", "utf8");
+  const all = readFileSync("src/app/all/page.tsx", "utf8");
+  assert.match(page, /\/all\?query=/);
+  assert.match(topics, /Google \/ Gemini/);
+  assert.match(topics, /通义千问 Qwen/);
+  assert.match(all, /initialQuery/);
 });

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aihotspot.core.content.PublicReportMapper">
+    <sql id="publicPredicate">
+        c.publication_status = 'PUBLISHED'
+        and c.visibility = 'PUBLIC'
+        and c.admission_status = 'PASSED'
+        and c.is_duplicate = false
+        and c.fact_status &lt;&gt; 'DEBUNKED'
+    </sql>
+
+    <select id="listBetween" resultType="com.aihotspot.core.content.PublicContentMapper$PublicContentView">
+        select c.id, s.name as source_name, c.source_type, c.source_official_level,
+               c.content_type, coalesce(c.title_zh, c.original_title) as title,
+               c.original_title, c.summary_zh as summary,
+               c.recommendation_reason, c.original_url, c.canonical_url,
+               c.fact_status, c.final_score, c.featured,
+               c.source_published_at, c.published_at
+        from content.content_item c
+        join source.source_entity s on s.id = c.source_entity_id
+        where <include refid="publicPredicate"/>
+          and c.published_at &gt;= #{startAt}
+          and c.published_at &lt; #{endAt}
+        order by c.featured desc, c.final_score desc nulls last, c.published_at desc, c.id desc
+        limit #{limit}
+    </select>
+
+    <select id="metricsBetween" resultType="com.aihotspot.core.content.PublicReportMapper$ReportMetrics">
+        select count(*) as story_count,
+               count(distinct c.source_entity_id) as source_count,
+               count(distinct c.source_entity_id) filter (where c.source_official_level in ('OFFICIAL', 'FIRST_PARTY')) as official_source_count,
+               count(*) filter (where c.featured) as featured_count
+        from content.content_item c
+        where <include refid="publicPredicate"/>
+          and c.published_at &gt;= #{startAt}
+          and c.published_at &lt; #{endAt}
+    </select>
+
+    <select id="archiveBuckets" resultType="com.aihotspot.core.content.PublicReportMapper$ArchiveBucket">
+        select bucket::date as anchor_date,
+               count(*) as story_count,
+               (array_agg(title order by published_at desc, id desc))[1] as lead_title
+        from (
+            select c.id, c.published_at, coalesce(c.title_zh, c.original_title) as title,
+            <choose>
+                <when test="period == 'WEEKLY'">date_trunc('week', c.published_at at time zone 'Asia/Shanghai')</when>
+                <when test="period == 'MONTHLY'">date_trunc('month', c.published_at at time zone 'Asia/Shanghai')</when>
+                <otherwise>date_trunc('day', c.published_at at time zone 'Asia/Shanghai')</otherwise>
+            </choose>
+            as bucket
+            from content.content_item c
+            where <include refid="publicPredicate"/>
+        ) report_rows
+        group by bucket
+        order by bucket desc
+        limit #{limit}
+    </select>
+
+    <select id="latestPublishedDate" resultType="java.time.LocalDate">
+        select max((c.published_at at time zone 'Asia/Shanghai')::date)
+        from content.content_item c
+        where <include refid="publicPredicate"/>
+    </select>
+</mapper>
