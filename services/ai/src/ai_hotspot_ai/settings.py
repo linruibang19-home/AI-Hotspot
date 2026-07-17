@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     rabbitmq_url: str = "amqp://ai_hotspot:ai_hotspot@localhost:5672/ai_hotspot"
     minio_endpoint: str = "http://localhost:9000"
+    minio_access_key: str = "ai_hotspot"
+    minio_secret_key: str = "ai_hotspot-local-password"
+    minio_bucket: str = "fetch-artifacts"
+
+    crawl_retry_delay_ms: int = 60_000
+    content_retry_delay_ms: int = 60_000
+    content_relevance_threshold: float = 70.0
+    content_quality_threshold: float = 60.0
 
 
 @lru_cache

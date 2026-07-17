@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: AI Hotspot Core API
-  version: 0.2.0
-  description: M2 身份权限、邀请注册、信源管理和审计接口契约。
+  version: 0.3.0
+  description: M3 身份、信源、RSS/Atom 采集任务、死信回放与公开内容接口契约。
 servers:
   - url: /api/core
 tags:
@@ -10,6 +10,8 @@ tags:
   - { name: IdentityAdmin, description: 管理员账号与邀请码 }
   - { name: SourceAdmin, description: ADMIN/OPERATOR 信源管理 }
   - { name: AuditAdmin, description: 管理审计 }
+  - { name: CrawlAdmin, description: RSS/Atom 采集任务、调度与死信回放 }
+  - { name: PublicContent, description: 游客可访问的已发布公开内容 }
   - { name: System, description: 健康检查与本地联调 }
 paths:
   /api/v1/health:
@@ -265,6 +267,100 @@ paths:
       responses:
         "200": { description: 按目标检索不可变审计记录 }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/fetch-jobs:
+    get:
+      tags: [CrawlAdmin]
+      operationId: listFetchJobs
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [QUEUED, RUNNING, WAITING_RETRY, SUCCEEDED, FAILED, DEAD_LETTERED, CANCELLED] } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: 采集任务列表
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/FetchJob" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/fetch-jobs/{id}:
+    get:
+      tags: [CrawlAdmin]
+      operationId: getFetchJob
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: 采集任务详情, content: { application/json: { schema: { $ref: "#/components/schemas/FetchJob" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/admin/fetch-jobs/dispatch-due:
+    post:
+      tags: [CrawlAdmin]
+      operationId: dispatchDueFetchJobs
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/CsrfHeader" }
+        - { name: limit, in: query, schema: { type: integer, default: 20, minimum: 1, maximum: 100 } }
+      responses:
+        "202": { description: 到期 Endpoint 已按行锁批量派发 }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/fetch-jobs/endpoints/{endpointId}:
+    post:
+      tags: [CrawlAdmin]
+      operationId: triggerEndpointFetch
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: endpointId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      responses:
+        "202": { description: 手工采集任务已进入 Outbox, content: { application/json: { schema: { $ref: "#/components/schemas/FetchJob" } } } }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/v1/admin/dead-letters:
+    get:
+      tags: [CrawlAdmin]
+      operationId: listDeadLetters
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [PENDING, REPLAYED, IGNORED] } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 100 } }
+      responses:
+        "200": { description: 死信列表, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/DeadLetter" } } } } }
+  /api/v1/admin/dead-letters/{id}/replay:
+    post:
+      tags: [CrawlAdmin]
+      operationId: replayDeadLetter
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      responses:
+        "202": { description: 死信已审计并重新进入 Outbox, content: { application/json: { schema: { $ref: "#/components/schemas/FetchJob" } } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/public/contents:
+    get:
+      tags: [PublicContent]
+      operationId: listPublicContents
+      security: []
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, minimum: 1, maximum: 50 } }
+      responses:
+        "200": { description: 仅返回 PUBLISHED + PUBLIC + 通过准入的内容, content: { application/json: { schema: { $ref: "#/components/schemas/PublicContentPage" } } } }
+  /api/v1/public/contents/featured:
+    get:
+      tags: [PublicContent]
+      operationId: listFeaturedContents
+      security: []
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, minimum: 1, maximum: 50 } }
+      responses:
+        "200": { description: 精选公开内容, content: { application/json: { schema: { $ref: "#/components/schemas/PublicContentPage" } } } }
+  /api/v1/public/contents/{id}:
+    get:
+      tags: [PublicContent]
+      operationId: getPublicContent
+      security: []
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: 公开内容详情, content: { application/json: { schema: { $ref: "#/components/schemas/PublicContent" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
   /api/v1/system/smoke/outbox:
     post:
       tags: [System]
@@ -468,3 +564,70 @@ components:
       properties:
         metrics: { $ref: "#/components/schemas/SourceMetrics" }
         items: { type: array, items: { $ref: "#/components/schemas/SourceSummary" } }
+    FetchJob:
+      type: object
+      required: [id, endpointId, triggerType, idempotencyKey, status, attemptCount, maxAttempts, correlationId, traceId, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        endpointId: { type: string, format: uuid }
+        endpointName: { type: string }
+        sourceName: { type: string }
+        triggerType: { type: string, enum: [SCHEDULED, MANUAL, REPLAY] }
+        idempotencyKey: { type: string }
+        status: { type: string, enum: [QUEUED, RUNNING, WAITING_RETRY, SUCCEEDED, FAILED, DEAD_LETTERED, CANCELLED] }
+        attemptCount: { type: integer, minimum: 0 }
+        maxAttempts: { type: integer, minimum: 1 }
+        httpStatus: { type: [integer, "null"] }
+        artifactCount: { type: integer, minimum: 0 }
+        discoveredCount: { type: integer, minimum: 0 }
+        newEntryCount: { type: integer, minimum: 0 }
+        errorCode: { type: [string, "null"] }
+        lastError: { type: [string, "null"] }
+        correlationId: { type: string, format: uuid }
+        traceId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DeadLetter:
+      type: object
+      required: [id, originalEventId, queueName, eventType, idempotencyKey, aggregateType, failureCount, replayStatus, firstFailedAt, lastFailedAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        originalEventId: { type: string, format: uuid }
+        queueName: { type: string }
+        eventType: { type: string }
+        idempotencyKey: { type: string }
+        aggregateType: { type: string }
+        aggregateId: { type: [string, "null"], format: uuid }
+        failureCount: { type: integer, minimum: 1 }
+        lastError: { type: string }
+        replayStatus: { type: string, enum: [PENDING, REPLAYED, IGNORED] }
+        firstFailedAt: { type: string, format: date-time }
+        lastFailedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    PublicContent:
+      type: object
+      required: [id, sourceName, sourceType, sourceOfficialLevel, contentType, title, summary, originalUrl, factStatus, finalScore, featured, publishedAt]
+      properties:
+        id: { type: string, format: uuid }
+        sourceName: { type: string }
+        sourceType: { type: string }
+        sourceOfficialLevel: { type: string, enum: [OFFICIAL, FIRST_PARTY, THIRD_PARTY] }
+        contentType: { type: string }
+        title: { type: string }
+        originalTitle: { type: [string, "null"] }
+        summary: { type: string }
+        recommendationReason: { type: [string, "null"] }
+        originalUrl: { type: string, format: uri }
+        canonicalUrl: { type: string, format: uri }
+        factStatus: { type: string, enum: [VERIFIED, UNCONFIRMED, DEBUNKED] }
+        finalScore: { type: number, minimum: 0, maximum: 100 }
+        featured: { type: boolean }
+        sourcePublishedAt: { type: [string, "null"], format: date-time }
+        publishedAt: { type: string, format: date-time }
+    PublicContentPage:
+      type: object
+      required: [items, hasMore]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PublicContent" } }
+        nextCursor: { type: [string, "null"] }
+        hasMore: { type: boolean }

@@ -27,6 +27,8 @@ ai-hotspot:
     enabled: false
     fixed-delay: 60000
     batch-size: 20
+  crawl:
+    scheduler-enabled: false
   mail:
     provider: mock
     from: no-reply@ai-hotspot.local
