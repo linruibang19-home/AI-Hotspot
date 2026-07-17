@@ -2,6 +2,7 @@ export type NavigationItem = {
   href: string;
   label: string;
   icon: string;
+  access?: "authenticated" | "operator" | "admin";
 };
 
 export type NavigationGroup = {
@@ -23,18 +24,19 @@ export const navigation: NavigationGroup[] = [
   {
     label: "智能",
     items: [
-      { href: "/subscriptions", label: "订阅与邮件", icon: "✉" },
-      { href: "/research", label: "知识库问答", icon: "◫" },
-      { href: "/agent", label: "Agent 工作台", icon: "◎" },
+      { href: "/subscriptions", label: "订阅与邮件", icon: "✉", access: "authenticated" },
+      { href: "/research", label: "知识库问答", icon: "◫", access: "authenticated" },
+      { href: "/agent", label: "Agent 工作台", icon: "◎", access: "authenticated" },
     ],
   },
   {
     label: "管理",
     items: [
-      { href: "/admin/sources", label: "信源管理", icon: "⌁" },
-      { href: "/admin/crawls", label: "采集监控", icon: "◌" },
-      { href: "/admin/content", label: "内容审核", icon: "✓" },
-      { href: "/admin/models", label: "模型与 Prompt", icon: "⚙" },
+      { href: "/admin/sources", label: "信源管理", icon: "⌁", access: "operator" },
+      { href: "/admin/crawls", label: "采集监控", icon: "◌", access: "operator" },
+      { href: "/admin/content", label: "内容审核", icon: "✓", access: "operator" },
+      { href: "/admin/models", label: "模型与 Prompt", icon: "⚙", access: "admin" },
+      { href: "/admin/users", label: "用户与邀请", icon: "◇", access: "admin" },
     ],
   },
 ];

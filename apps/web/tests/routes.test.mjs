@@ -15,6 +15,10 @@ const expectedPages = [
   "src/app/admin/crawls/page.tsx",
   "src/app/admin/content/page.tsx",
   "src/app/admin/models/page.tsx",
+  "src/app/admin/users/page.tsx",
+  "src/app/admin/sources/[id]/page.tsx",
+  "src/app/login/page.tsx",
+  "src/app/invite/[token]/page.tsx",
 ];
 
 test("M1 route skeleton is complete", () => {
@@ -33,4 +37,15 @@ test("excluded collectors never enter navigation", () => {
   assert.equal(navigation.includes("wechat"), false);
   assert.equal(navigation.includes("微信公众号"), false);
   assert.equal(navigation.includes("x api"), false);
+});
+
+test("M2 identity and source management use the real Core API", () => {
+  assert.equal(existsSync("src/components/auth-provider.tsx"), true);
+  assert.equal(existsSync("src/lib/api.ts"), true);
+  const sources = readFileSync("src/app/admin/sources/page.tsx", "utf8");
+  assert.match(sources, /apiFetch/);
+  assert.doesNotMatch(sources, /M1 Mock 数据/);
+  const navigation = readFileSync("src/lib/navigation.ts", "utf8");
+  assert.match(navigation, /access: "operator"/);
+  assert.match(navigation, /access: "admin"/);
 });
