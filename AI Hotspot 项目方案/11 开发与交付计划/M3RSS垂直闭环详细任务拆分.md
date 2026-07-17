@@ -1,6 +1,6 @@
 # AI Hotspot M3 RSS/Atom 垂直闭环详细任务拆分
 
-> 文档状态：执行基线  
+> 文档状态：已完成本地技术验证
 > 适用分支：`feat/m3-rss-vertical-slice`  
 > 阶段目标：以真实 RSS/Atom 信源完成从调度到公开展示的可运行、可追踪、可恢复纵向闭环。
 
@@ -108,7 +108,7 @@ M3 使用配置化阈值 `relevance>=70`、`quality>=60`。只有满足以下全
 ### 管理端
 
 - `POST /admin/fetch-jobs/dispatch-due`：立即扫描到期入口；
-- `POST /admin/source-endpoints/{id}/fetch`：手工触发；
+- `POST /admin/fetch-jobs/endpoints/{id}`：手工触发；
 - `GET /admin/fetch-jobs`、`GET /admin/fetch-jobs/{id}`：任务列表与详情；
 - `GET /admin/dead-letters`、`POST /admin/dead-letters/{id}/replay`：死信查看与回放。
 
