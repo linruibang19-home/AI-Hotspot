@@ -5,6 +5,7 @@ from ai_hotspot_ai.settings import Settings, get_settings
 
 from .base import EmbeddingProvider, GenerationProvider, RerankProvider
 from .mock import MockEmbeddingProvider, MockGenerationProvider, MockRerankProvider
+from .openai_compatible import OpenAICompatibleGenerationProvider
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,19 +16,18 @@ class ProviderRegistry:
 
 
 def build_provider_registry(settings: Settings) -> ProviderRegistry:
-    unsupported = {
-        "generation": settings.generation_provider,
-        "embedding": settings.embedding_provider,
-        "rerank": settings.rerank_provider,
-    }
-    non_mock = {name: provider for name, provider in unsupported.items() if provider != "mock"}
-    if non_mock:
-        configured = ", ".join(f"{name}={provider}" for name, provider in non_mock.items())
-        raise RuntimeError(
-            f"M1 only enables Mock Provider implementations; configured: {configured}"
+    if settings.embedding_provider != "mock" or settings.rerank_provider != "mock":
+        raise RuntimeError("Remote embedding/rerank adapters are not enabled until the RAG stage")
+    if settings.generation_provider == "openai-compatible":
+        if not settings.generation_base_url or not settings.generation_api_key:
+            raise RuntimeError("GENERATION_BASE_URL and GENERATION_API_KEY are required")
+        generation = OpenAICompatibleGenerationProvider(
+            settings.generation_base_url, settings.generation_api_key, settings.generation_model
         )
+    else:
+        generation = MockGenerationProvider()
     return ProviderRegistry(
-        generation=MockGenerationProvider(),
+        generation=generation,
         embedding=MockEmbeddingProvider(),
         rerank=MockRerankProvider(),
     )
