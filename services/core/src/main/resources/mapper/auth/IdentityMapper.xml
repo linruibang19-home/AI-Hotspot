@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aihotspot.core.auth.IdentityMapper">
+    <select id="findUserByEmail" resultType="com.aihotspot.core.auth.IdentityMapper$UserAccount">
+        select id, email::text as email, display_name, password_hash, status, locale, timezone,
+               version, created_by, created_at, updated_at, last_login_at
+        from iam.user_account
+        where email = #{email}
+        limit 1
+    </select>
+
+    <select id="findUserById" resultType="com.aihotspot.core.auth.IdentityMapper$UserAccount">
+        select id, email::text as email, display_name, password_hash, status, locale, timezone,
+               version, created_by, created_at, updated_at, last_login_at
+        from iam.user_account
+        where id = #{id}
+    </select>
+
+    <select id="findRoleCodes" resultType="string">
+        select r.code
+        from iam.user_role ur
+        join iam.role r on r.id = ur.role_id
+        where ur.user_id = #{userId}
+        order by r.code
+    </select>
+
+    <select id="findPermissionCodes" resultType="string">
+        select distinct p.code
+        from iam.user_role ur
+        join iam.role_permission rp on rp.role_id = ur.role_id
+        join iam.permission p on p.id = rp.permission_id
+        where ur.user_id = #{userId}
+        order by p.code
+    </select>
+
+    <insert id="insertUser">
+        insert into iam.user_account (
+            id, email, display_name, password_hash, status, locale, timezone,
+            version, created_by, created_at, updated_at, last_login_at
+        ) values (
+            #{id}, #{email}, #{displayName}, #{passwordHash}, #{status}, #{locale}, #{timezone},
+            #{version}, #{createdBy}, #{createdAt}, #{updatedAt}, #{lastLoginAt}
+        )
+    </insert>
+
+    <insert id="assignRole">
+        insert into iam.user_role (user_id, role_id, assigned_by)
+        select #{userId}, id, #{assignedBy}
+        from iam.role where code = #{roleCode}
+        on conflict (user_id, role_id) do nothing
+    </insert>
+
+    <update id="updateLastLogin">
+        update iam.user_account set last_login_at = now(), updated_at = now() where id = #{userId}
+    </update>
+
+    <insert id="insertInvitation">
+        insert into iam.invitation_code (
+            id, code_hash, created_by, default_role, max_uses, used_count,
+            expires_at, status, version, created_at
+        ) values (
+            #{id}, #{codeHash}, #{createdBy}, #{defaultRole}, #{maxUses}, #{usedCount},
+            #{expiresAt}, #{status}, #{version}, #{createdAt}
+        )
+    </insert>
+
+    <select id="findInvitationForUpdate" resultType="com.aihotspot.core.auth.IdentityMapper$Invitation">
+        select id, code_hash, created_by, default_role, max_uses, used_count,
+               expires_at, status, version, created_at
+        from iam.invitation_code
+        where code_hash = #{codeHash}
+        for update
+    </select>
+
+    <update id="consumeInvitation">
+        update iam.invitation_code
+        set used_count = used_count + 1,
+            status = case when used_count + 1 &gt;= max_uses then 'EXHAUSTED' else status end,
+            version = version + 1
+        where id = #{id} and version = #{version} and status = 'ACTIVE'
+    </update>
+
+    <select id="listUsers" resultType="com.aihotspot.core.auth.IdentityMapper$AdminUserView">
+        select u.id, u.email::text as email, u.display_name, u.status,
+               coalesce(string_agg(r.code, ',' order by r.code), '') as roles,
+               u.created_at, u.last_login_at
+        from iam.user_account u
+        left join iam.user_role ur on ur.user_id = u.id
+        left join iam.role r on r.id = ur.role_id
+        group by u.id
+        order by u.created_at desc, u.id desc
+        limit #{limit}
+    </select>
+
+    <select id="listInvitations" resultType="com.aihotspot.core.auth.IdentityMapper$InvitationView">
+        select id, default_role, max_uses, used_count, expires_at,
+               case when status = 'ACTIVE' and expires_at &lt; now() then 'EXPIRED' else status end as status,
+               created_at
+        from iam.invitation_code
+        order by created_at desc, id desc
+        limit #{limit}
+    </select>
+</mapper>

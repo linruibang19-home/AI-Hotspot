@@ -1,29 +1,280 @@
 openapi: 3.1.0
 info:
   title: AI Hotspot Core API
-  version: 0.1.0
+  version: 0.2.0
+  description: M2 身份权限、邀请注册、信源管理和审计接口契约。
 servers:
   - url: /api/core
+tags:
+  - { name: Auth, description: 会话认证与邀请注册 }
+  - { name: IdentityAdmin, description: 管理员账号与邀请码 }
+  - { name: SourceAdmin, description: ADMIN/OPERATOR 信源管理 }
+  - { name: AuditAdmin, description: 管理审计 }
+  - { name: System, description: 健康检查与本地联调 }
 paths:
   /api/v1/health:
     get:
+      tags: [System]
       operationId: getCoreHealth
       responses:
         "200":
           description: Core API 正常
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/Health"
+              schema: { $ref: "#/components/schemas/Health" }
+  /api/v1/auth/csrf:
+    get:
+      tags: [Auth]
+      operationId: getCsrfToken
+      security: []
+      responses:
+        "200":
+          description: 返回双提交 CSRF Token，并设置 XSRF-TOKEN Cookie。
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CsrfToken" }
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      security: []
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: 登录成功并设置 HttpOnly Session Cookie。
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CurrentUser" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      responses:
+        "200": { description: 会话已注销 }
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      operationId: getCurrentUser
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: 当前登录用户
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CurrentUser" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/auth/invitations/{token}/register:
+    post:
+      tags: [Auth]
+      operationId: registerByInvitation
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "200":
+          description: 注册成功；邀请码仅可在约束范围内消费。
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CurrentUser" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/v1/admin/users:
+    get:
+      tags: [IdentityAdmin]
+      operationId: listUsers
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: limit, in: query, schema: { type: integer, default: 50 } }]
+      responses:
+        "200":
+          description: 用户列表
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/AdminUser" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [IdentityAdmin]
+      operationId: createUser
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateUserRequest" }
+      responses:
+        "200": { description: 账号已创建 }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/admin/invitations:
+    get:
+      tags: [IdentityAdmin]
+      operationId: listInvitations
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: 邀请列表，不返回历史明文 Token。
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Invitation" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [IdentityAdmin]
+      operationId: createInvitation
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateInvitationRequest" }
+      responses:
+        "200":
+          description: 邀请已创建；明文 Token 只在本响应返回一次。
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationCreated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/sources:
+    get:
+      tags: [SourceAdmin]
+      operationId: listSources
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: query, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200":
+          description: 信源指标和入口列表
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourceListResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [SourceAdmin]
+      operationId: createSource
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSourceRequest" }
+      responses:
+        "200":
+          description: 创建 DRAFT 主体和入口；不允许 X/微信公众号，且执行 SSRF 安全校验。
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedSource" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/v1/admin/sources/connector-schemas:
+    get:
+      tags: [SourceAdmin]
+      operationId: getConnectorSchemas
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: MVP Connector 类型及允许配置键 }
+  /api/v1/admin/sources/{id}:
+    get:
+      tags: [SourceAdmin]
+      operationId: getSource
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: 信源主体与入口详情 }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/admin/sources/endpoints/{id}/probe:
+    post:
+      tags: [SourceAdmin]
+      operationId: probeSourceEndpoint
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionRequest" }
+      responses:
+        "200":
+          description: 安全试抓取结果
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProbeResult" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/admin/sources/endpoints/{id}/activate:
+    post:
+      tags: [SourceAdmin]
+      operationId: activateSourceEndpoint
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionRequest" }
+      responses:
+        "200": { description: 试抓取通过后启用 }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/v1/admin/sources/endpoints/{id}/pause:
+    post:
+      tags: [SourceAdmin]
+      operationId: pauseSourceEndpoint
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionRequest" }
+      responses:
+        "200": { description: 入口已暂停 }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/admin/audits:
+    get:
+      tags: [AuditAdmin]
+      operationId: listAudits
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: targetType, in: query, required: true, schema: { type: string } }
+        - { name: targetId, in: query, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        "200": { description: 按目标检索不可变审计记录 }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /api/v1/system/smoke/outbox:
     post:
+      tags: [System]
       operationId: createOutboxSmokeEvent
       description: 仅在本地 Smoke 开关启用时可用。
       responses:
-        "202":
-          description: 测试事件已进入 Outbox
+        "202": { description: 测试事件已进入 Outbox }
   /api/v1/system/smoke/mail:
     post:
+      tags: [System]
       operationId: sendSmokeMail
       description: 仅在本地 Smoke 开关启用时可用。
       requestBody:
@@ -37,10 +288,48 @@ paths:
                 recipient: { type: string, format: email }
                 subject: { type: string, minLength: 1 }
       responses:
-        "202":
-          description: 测试邮件已交给 MailProvider
+        "202": { description: 测试邮件已交给 MailProvider }
 components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: AIHOTSPOT_SESSION
+      description: Redis 中保存的服务端不透明会话。
+  parameters:
+    CsrfHeader:
+      name: X-XSRF-TOKEN
+      in: header
+      required: true
+      schema: { type: string }
+  responses:
+    Unauthorized:
+      description: 未登录或会话已失效
+      content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
+    Forbidden:
+      description: 当前用户缺少角色或权限
+      content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
+    Conflict:
+      description: 唯一性或乐观锁冲突
+      content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
+    NotFound:
+      description: 资源不存在
+      content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
+    Unprocessable:
+      description: 领域规则、URL 安全策略或试抓取前置条件未满足
+      content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
+    RateLimited:
+      description: 登录或邀请尝试超过限额
+      content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
   schemas:
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+        correlationId: { type: string }
     Health:
       type: object
       required: [status, service, version, environment, correlationId]
@@ -50,3 +339,132 @@ components:
         version: { type: string }
         environment: { type: string }
         correlationId: { type: string }
+    CsrfToken:
+      type: object
+      required: [headerName, parameterName, token]
+      properties:
+        headerName: { type: string, const: X-XSRF-TOKEN }
+        parameterName: { type: string }
+        token: { type: string }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, writeOnly: true }
+    RegisterRequest:
+      type: object
+      required: [email, displayName, password]
+      properties:
+        email: { type: string, format: email }
+        displayName: { type: string, minLength: 2, maxLength: 80 }
+        password: { type: string, minLength: 12, maxLength: 72, writeOnly: true }
+    CurrentUser:
+      type: object
+      required: [id, email, displayName, roles, permissions]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        roles: { type: array, items: { type: string, enum: [USER, EDITOR, OPERATOR, ADMIN] } }
+        permissions: { type: array, items: { type: string } }
+    CreateUserRequest:
+      allOf:
+        - { $ref: "#/components/schemas/RegisterRequest" }
+        - type: object
+          required: [role]
+          properties:
+            role: { type: string, enum: [USER, EDITOR, OPERATOR, ADMIN] }
+    AdminUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        status: { type: string }
+        roles: { type: string }
+        createdAt: { type: string, format: date-time }
+        lastLoginAt: { type: [string, "null"], format: date-time }
+    CreateInvitationRequest:
+      type: object
+      required: [defaultRole, maxUses, expiresAt]
+      properties:
+        defaultRole: { type: string, enum: [USER, EDITOR, OPERATOR, ADMIN] }
+        maxUses: { type: integer, minimum: 1, maximum: 100 }
+        expiresAt: { type: string, format: date-time }
+    Invitation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        defaultRole: { type: string }
+        maxUses: { type: integer }
+        usedCount: { type: integer }
+        expiresAt: { type: string, format: date-time }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+    InvitationCreated:
+      allOf:
+        - { $ref: "#/components/schemas/Invitation" }
+        - type: object
+          required: [token]
+          properties:
+            token: { type: string, description: 仅返回一次的邀请明文 }
+    CreateSourceRequest:
+      type: object
+      required: [name, slug, entityType, officialLevel, authorityScore, endpointName, endpointUrl, endpointType, pollingIntervalSeconds, displayPolicy, indexPolicy]
+      properties:
+        name: { type: string, maxLength: 120 }
+        slug: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        entityType: { type: string, enum: [COMPANY, RESEARCH, MEDIA, COMMUNITY, PROJECT, OTHER] }
+        countryCode: { type: string, maxLength: 2 }
+        officialLevel: { type: string, enum: [OFFICIAL, FIRST_PARTY, THIRD_PARTY] }
+        authorityScore: { type: number, minimum: 0, maximum: 100 }
+        websiteUrl: { type: string, format: uri }
+        logoUrl: { type: string, format: uri }
+        endpointName: { type: string, maxLength: 120 }
+        endpointUrl: { type: string, format: uri }
+        endpointType: { type: string, enum: [RSS, ATOM, WEBSITE, SITEMAP, GITHUB, HUGGING_FACE, ARXIV, OPENREVIEW, HACKER_NEWS, PUBLIC_MEDIA, PUBLIC_COMMUNITY] }
+        language: { type: string }
+        pollingIntervalSeconds: { type: integer, minimum: 300, maximum: 2592000 }
+        displayPolicy: { type: string, enum: [FULLTEXT_ALLOWED, SUMMARY_ONLY, LINK_ONLY, HIDDEN] }
+        indexPolicy: { type: string, enum: [PUBLIC_RAG, PRIVATE_RAG, METADATA_ONLY, NO_INDEX] }
+        authorityOverride: { type: number, minimum: 0, maximum: 100 }
+        config: { type: object, additionalProperties: true }
+    CreatedSource:
+      type: object
+      required: [sourceId, endpointId]
+      properties:
+        sourceId: { type: string, format: uuid }
+        endpointId: { type: string, format: uuid }
+    VersionRequest:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer, minimum: 0 }
+    ProbeResult:
+      type: object
+      required: [endpointId, healthStatus, latencyMs, message, version]
+      properties:
+        endpointId: { type: string, format: uuid }
+        healthStatus: { type: string, enum: [HEALTHY, WARNING, FAILED] }
+        httpStatus: { type: [integer, "null"] }
+        latencyMs: { type: integer }
+        message: { type: string }
+        version: { type: integer }
+    SourceMetrics:
+      type: object
+      properties:
+        totalEndpoints: { type: integer }
+        activeEndpoints: { type: integer }
+        healthyEndpoints: { type: integer }
+        attentionEndpoints: { type: integer }
+    SourceSummary:
+      type: object
+      additionalProperties: true
+      required: [id, name, slug, endpointId, endpointType, endpointStatus, healthStatus, endpointVersion]
+    SourceListResponse:
+      type: object
+      required: [metrics, items]
+      properties:
+        metrics: { $ref: "#/components/schemas/SourceMetrics" }
+        items: { type: array, items: { $ref: "#/components/schemas/SourceSummary" } }
