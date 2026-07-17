@@ -1,4 +1,5 @@
 import hashlib
+import json
 import math
 import re
 
@@ -12,6 +13,27 @@ class MockGenerationProvider(GenerationProvider):
     model = "mock-generation-v1"
 
     async def generate(self, prompt: str) -> str:
+        if prompt.startswith("AI_HOTSPOT_CONTENT_ANALYSIS_V1"):
+            fields = {}
+            for line in prompt.splitlines():
+                if "：" in line:
+                    key, value = line.split("：", 1)
+                    fields[key] = value
+            title = fields.get("标题", "AI 技术动态")
+            summary = fields.get("正文摘要", title)
+            return json.dumps(
+                {
+                    "titleZh": title,
+                    "summaryZh": f"该资讯介绍了 {summary[:180]}",
+                    "categoryCode": "INDUSTRY",
+                    "tags": ["AI 动态"],
+                    "entities": [],
+                    "factStatus": "CONFIRMED",
+                    "confidenceScore": 80,
+                    "recommendationReason": "内容来自公开信源，已通过可重复的 Mock 质量分析。",
+                },
+                ensure_ascii=False,
+            )
         summary = " ".join(prompt.strip().split())[:160]
         return f"[Mock Provider] 已接收请求：{summary}"
 

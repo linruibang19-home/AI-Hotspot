@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aihotspot.core.content.ContentGovernanceMapper">
+    <sql id="reviewColumns">
+        c.id, coalesce(c.title_zh, c.original_title) as title, s.name as source_name,
+        c.original_url, c.category_code, c.publication_status, c.visibility,
+        c.admission_status, c.fact_status, c.relevance_score, c.quality_score,
+        c.final_score, c.featured, c.is_duplicate as duplicate, c.duplicate_of_id,
+        c.quality_dimensions::text as quality_dimensions,
+        coalesce((select string_agg(t.tag, ' · ' order by t.tag) from content.content_tag t where t.content_item_id = c.id), '') as tags,
+        coalesce((select string_agg(e.title, ' · ' order by e.last_seen_at desc) from content.content_event_relation r join content.event_cluster e on e.id = r.event_cluster_id where r.content_item_id = c.id), '') as events,
+        c.version, c.updated_at
+    </sql>
+    <select id="metrics" resultType="com.aihotspot.core.content.ContentGovernanceMapper$ContentMetrics">
+        select count(*) filter (where admission_status in ('PENDING', 'REVIEW_REQUIRED')) as review_required,
+               count(*) filter (where fact_status = 'UNCONFIRMED') as unconfirmed,
+               count(*) filter (where is_duplicate) as duplicates,
+               (select count(*) from governance.content_ticket where status in ('OPEN', 'IN_PROGRESS')) as open_tickets
+        from content.content_item
+    </select>
+    <select id="list" resultType="com.aihotspot.core.content.ContentGovernanceMapper$ContentReviewItem">
+        select <include refid="reviewColumns"/> from content.content_item c
+        join source.source_entity s on s.id = c.source_entity_id
+        <where>
+            <if test="status != null">c.admission_status = #{status}</if>
+            <if test="factStatus != null"><if test="status != null">and</if> c.fact_status = #{factStatus}</if>
+            <if test="query != null"><if test="status != null or factStatus != null">and</if>
+                (c.original_title ilike '%' || #{query} || '%' or c.title_zh ilike '%' || #{query} || '%' or s.name ilike '%' || #{query} || '%')
+            </if>
+        </where>
+        order by case when c.admission_status in ('PENDING', 'REVIEW_REQUIRED') then 0 else 1 end,
+                 c.updated_at desc, c.id desc limit #{limit}
+    </select>
+    <select id="findById" resultType="com.aihotspot.core.content.ContentGovernanceMapper$ContentReviewItem">
+        select <include refid="reviewColumns"/> from content.content_item c
+        join source.source_entity s on s.id = c.source_entity_id where c.id = #{id}
+    </select>
+    <update id="govern">
+        update content.content_item set publication_status = #{publicationStatus}, visibility = #{visibility},
+            admission_status = #{admissionStatus}, fact_status = #{factStatus}, featured = #{featured},
+            published_at = case when #{publicationStatus} = 'PUBLISHED' then coalesce(published_at, now()) else published_at end,
+            version = version + 1, updated_at = now()
+        where id = #{id} and version = #{version}
+    </update>
+    <select id="listEvents" resultType="com.aihotspot.core.content.ContentGovernanceMapper$EventView">
+        select e.id, e.title, e.summary, e.category_code, e.status, e.fact_status,
+               count(r.content_item_id) as content_count, e.first_seen_at, e.last_seen_at, e.version
+        from content.event_cluster e left join content.content_event_relation r on r.event_cluster_id = e.id
+        group by e.id order by e.last_seen_at desc, e.id desc limit #{limit}
+    </select>
+    <select id="findEventById" resultType="com.aihotspot.core.content.ContentGovernanceMapper$EventView">
+        select e.id, e.title, e.summary, e.category_code, e.status, e.fact_status,
+               count(r.content_item_id) as content_count, e.first_seen_at, e.last_seen_at, e.version
+        from content.event_cluster e left join content.content_event_relation r on r.event_cluster_id = e.id
+        where e.id = #{id} group by e.id
+    </select>
+    <insert id="addRelation">
+        insert into content.content_event_relation
+            (content_item_id, event_cluster_id, relation_type, confidence, is_primary, created_by)
+        values (#{contentId}, #{eventId}, #{relationType}, #{confidence}, false, #{createdBy})
+        on conflict (content_item_id, event_cluster_id) do update set
+            relation_type = excluded.relation_type, confidence = excluded.confidence, created_by = excluded.created_by
+    </insert>
+    <delete id="removeRelation">
+        delete from content.content_event_relation where content_item_id = #{contentId}
+            and event_cluster_id = #{eventId} and is_primary = false
+    </delete>
+    <insert id="insertTicket">
+        insert into governance.content_ticket
+            (id, content_item_id, event_cluster_id, ticket_type, priority, reason, contact_email, submitted_by)
+        values (#{id}, #{contentItemId}, #{eventClusterId}, #{ticketType}, #{priority}, #{reason}, #{contactEmail}, #{submittedBy})
+    </insert>
+    <select id="listTickets" resultType="com.aihotspot.core.content.ContentGovernanceMapper$TicketView">
+        select id, content_item_id, event_cluster_id, ticket_type, status, priority, reason,
+               contact_email, resolution, submitted_by, assigned_to, resolved_by, created_at, resolved_at
+        from governance.content_ticket
+        <if test="status != null">where status = #{status}</if>
+        order by case priority when 'URGENT' then 0 when 'HIGH' then 1 when 'NORMAL' then 2 else 3 end,
+                 created_at, id limit #{limit}
+    </select>
+    <select id="findTicketById" resultType="com.aihotspot.core.content.ContentGovernanceMapper$TicketView">
+        select id, content_item_id, event_cluster_id, ticket_type, status, priority, reason,
+               contact_email, resolution, submitted_by, assigned_to, resolved_by, created_at, resolved_at
+        from governance.content_ticket where id = #{id}
+    </select>
+    <update id="resolveTicket">
+        update governance.content_ticket set status = #{status}, resolution = #{resolution},
+            resolved_by = #{resolvedBy}, resolved_at = now(), updated_at = now()
+        where id = #{id} and status in ('OPEN', 'IN_PROGRESS')
+    </update>
+</mapper>

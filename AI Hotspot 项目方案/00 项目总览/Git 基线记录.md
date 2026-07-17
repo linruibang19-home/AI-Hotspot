@@ -58,4 +58,7 @@ git remote -v
 - `m3-rss-vertical-slice-v1`：M3 合并 `main` 后创建的本地里程碑标签；
 - `feat/m4-public-connectors`：M4 公开 Connector、正式信源目录、X 预留边界与验收任务分支；
 - `m4-public-connectors-v1`：M4 合并 `main` 后创建的本地里程碑标签；
+- `m4-source-catalog-v2`：M4 第二批正式信源、报告和主题界面扩展标签；
+- `feat/m5-content-quality-events`：M5 结构化 AI、评分、去重、事件和治理任务分支；
+- `m5-content-quality-events-v1`：M5 合并 `main` 后创建的本地里程碑标签；
 - 未配置 Git Remote，未 push、未创建远程 PR、未部署生产。

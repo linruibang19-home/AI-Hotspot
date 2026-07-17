@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 
 from ai_hotspot_ai.connectors import accept_header, parse_connector
+from ai_hotspot_ai.content_analysis import analyze_content
 from ai_hotspot_ai.feed import FetchRequest, fetch_feed
 from ai_hotspot_ai.providers.factory import get_provider_registry
 from ai_hotspot_ai.repository import (
@@ -92,27 +93,31 @@ def process_content_event(payload: dict[str, object], settings: Settings) -> dic
         complete_inbox(payload, CONTENT_CONSUMER, result)
         return result
     registry = get_provider_registry()
-    source_summary = context.summary or context.title
-    prompt = (
-        "请用中文简洁概括以下公开 AI 技术资讯，不添加原文不存在的事实：\n"
-        f"标题：{context.title}\n内容：{source_summary[:3000]}"
-    )
-    generated = asyncio.run(registry.generation.generate(prompt))
-    summary = context.summary or generated
-    relevance_score = _bounded_float(context.config.get("relevanceScore"), 78.0)
-    quality_score = _bounded_float(context.config.get("qualityScore"), 72.0)
-    final_score = round(relevance_score * 0.55 + quality_score * 0.45, 2)
-    reason = (
-        f"来自{context.source_name}的{_official_label(context.source_official_level)}公开内容，"
-        "已完成基础相关性与质量准入。"
+    analysis = asyncio.run(
+        analyze_content(
+            registry.generation,
+            title=context.title,
+            summary=context.summary or context.title,
+            source_name=context.source_name,
+            official_level=context.source_official_level,
+            authority_score=context.authority_score,
+        )
     )
     published = finish_content(
         context,
-        summary=summary,
-        reason=reason,
-        relevance_score=relevance_score,
-        quality_score=quality_score,
-        final_score=final_score,
+        title_zh=analysis.title_zh,
+        summary=analysis.summary_zh,
+        reason=analysis.recommendation_reason,
+        category_code=analysis.category_code,
+        tags=analysis.tags,
+        entities=analysis.entities,
+        fact_status=analysis.fact_status,
+        confidence_score=analysis.confidence_score,
+        quality_dimensions=analysis.quality_dimensions,
+        generation_metadata=analysis.json_data(),
+        relevance_score=analysis.relevance_score,
+        quality_score=analysis.quality_score,
+        final_score=analysis.final_score,
         provider_name=registry.generation.name,
         provider_model=registry.generation.model,
         relevance_threshold=settings.content_relevance_threshold,
@@ -120,7 +125,9 @@ def process_content_event(payload: dict[str, object], settings: Settings) -> dic
     )
     result = {
         "published": published,
-        "finalScore": final_score,
+        "finalScore": analysis.final_score,
+        "factStatus": analysis.fact_status,
+        "category": analysis.category_code,
         "provider": registry.generation.name,
     }
     complete_inbox(payload, CONTENT_CONSUMER, result)

@@ -1255,6 +1255,27 @@ a {
 .topic-card span { margin-top: auto; padding-top: 14px; color: var(--accent); font-size: 10px; }
 .topic-card b { margin-left: 4px; }
 
+.governance-toolbar { margin-bottom: 18px; }
+.governance-list { display: grid; gap: 12px; padding-bottom: 50px; }
+.governance-card { padding: 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.governance-card > header { display: flex; justify-content: space-between; gap: 20px; }
+.governance-card h2 { margin: 8px 0 6px; font-size: 16px; line-height: 1.45; }
+.governance-card p { margin: 0; color: var(--muted); font-size: 11px; }
+.governance-card footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 15px; border-top: 1px solid var(--border); color: var(--muted); font-size: 10px; }
+.governance-card.compact { padding: 18px 20px; }
+.governance-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.governance-badge { padding: 3px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-family: "Geist Mono", monospace; font-size: 9px; }
+.governance-badge.unconfirmed, .governance-badge.high, .governance-badge.urgent { background: #fff4dc; color: #9a5a00; }
+.governance-badge.debunked, .governance-badge.rejected, .governance-badge.failed { background: #fee9e9; color: #a32e2e; }
+.governance-score { display: grid; min-width: 62px; height: 62px; place-content: center; border: 1px solid var(--border); border-radius: 50%; text-align: center; }
+.governance-score strong { font-family: "Geist Mono", monospace; font-size: 17px; }
+.governance-score span { color: var(--muted); font-size: 8px; }
+.score-strip { display: grid; grid-template-columns: 110px 110px minmax(0, 1fr); gap: 12px; margin: 16px 0; padding: 11px 13px; border-radius: 8px; background: var(--surface-alt); color: var(--muted); font-size: 10px; }
+.score-strip b { display: block; overflow: hidden; margin-top: 3px; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+.governance-form label { display: grid; gap: 8px; font-size: 11px; }
+.governance-form textarea { min-height: 130px; padding: 12px; resize: vertical; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
 @media (max-width: 1000px) {
   .workspace-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1430,6 +1451,9 @@ a {
   .topic-section > header { align-items: flex-start; flex-direction: column; gap: 5px; }
   .topic-grid { grid-template-columns: 1fr; }
   .topics-hero { min-height: auto; padding: 24px; }
+  .governance-card > header, .governance-card footer { align-items: stretch; flex-direction: column; }
+  .score-strip { grid-template-columns: 1fr 1fr; }
+  .score-strip span:last-child { grid-column: 1 / -1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

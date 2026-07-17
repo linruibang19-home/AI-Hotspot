@@ -1,4 +1,5 @@
 from ai_hotspot_ai import pipeline
+from ai_hotspot_ai.repository import _may_publish_unconfirmed
 
 
 def test_m1_smoke_event_is_completed_without_content_item(monkeypatch) -> None:
@@ -29,3 +30,9 @@ def test_duplicate_m1_smoke_event_is_ignored(monkeypatch) -> None:
         None,  # type: ignore[arg-type]
     )
     assert result == {"duplicate": True}
+
+
+def test_low_authority_unconfirmed_content_requires_review() -> None:
+    assert _may_publish_unconfirmed("THIRD_PARTY", 79.99) is False
+    assert _may_publish_unconfirmed("THIRD_PARTY", 80) is True
+    assert _may_publish_unconfirmed("OFFICIAL", 50) is True
