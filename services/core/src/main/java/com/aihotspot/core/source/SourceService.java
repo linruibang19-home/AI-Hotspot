@@ -29,14 +29,15 @@ public class SourceService {
 
     private static final Set<String> ENTITY_TYPES = Set.of("COMPANY", "RESEARCH", "MEDIA", "COMMUNITY", "PROJECT", "OTHER");
     private static final Set<String> OFFICIAL_LEVELS = Set.of("OFFICIAL", "FIRST_PARTY", "THIRD_PARTY");
-    private static final Set<String> ENDPOINT_TYPES = Set.of("RSS", "ATOM", "WEBSITE", "SITEMAP", "GITHUB", "HUGGING_FACE", "ARXIV", "OPENREVIEW", "HACKER_NEWS", "PUBLIC_MEDIA", "PUBLIC_COMMUNITY");
+    private static final Set<String> ENDPOINT_TYPES = Set.of("RSS", "ATOM", "WEBSITE", "SITEMAP", "GITHUB", "HUGGING_FACE", "ARXIV", "OPENREVIEW", "HACKER_NEWS", "PUBLIC_MEDIA", "PUBLIC_COMMUNITY", "X");
     private static final Set<String> DISPLAY_POLICIES = Set.of("FULLTEXT_ALLOWED", "SUMMARY_ONLY", "LINK_ONLY", "HIDDEN");
     private static final Set<String> INDEX_POLICIES = Set.of("PUBLIC_RAG", "PRIVATE_RAG", "METADATA_ONLY", "NO_INDEX");
     private static final Pattern SLUG = Pattern.compile("[a-z0-9]+(?:-[a-z0-9]+)*");
     private static final Set<String> COMMON_CONFIG_KEYS = Set.of(
             "timeoutSeconds", "maxResponseBytes", "userAgent", "respectRobots",
             "maxItems", "maxAttempts", "autoPublish", "relevanceScore", "qualityScore",
-            "owner", "repository", "resource", "categories", "venueIds", "feed");
+            "owner", "repository", "resource", "categories", "venueIds", "feed",
+            "query", "urlPattern", "minScore", "maxAgeHours", "testRun");
 
     private final SourceMapper mapper;
     private final AuditService audit;
@@ -66,7 +67,8 @@ public class SourceService {
                 endpointId, sourceId, command.endpointName().strip(), command.endpointUrl().strip(), normalizedUrl,
                 command.endpointType(), command.endpointType(), blankToNull(command.language()), command.pollingIntervalSeconds(),
                 command.displayPolicy(), command.indexPolicy(), command.authorityOverride(), json(command.config()), null,
-                "DRAFT", "UNKNOWN", 0, 0, actor.id()));
+                "DRAFT", "UNKNOWN", 0, 0, actor.id(),
+                Boolean.TRUE.equals(command.config().get("testRun")) ? "TEST" : "USER_MANAGED", null));
         audit.record(actor.id(), "SOURCE_CREATED", "SOURCE_ENTITY", sourceId, null,
                 json(Map.of("name", command.name(), "endpointId", endpointId, "endpointType", command.endpointType(), "url", normalizedUrl)), request);
         return new CreatedSource(sourceId, endpointId);
@@ -92,6 +94,9 @@ public class SourceService {
     public ProbeResult probe(UUID endpointId, long version, AppUserPrincipal actor, HttpServletRequest request) {
         SourceMapper.EndpointDetail endpoint = requireEndpoint(endpointId);
         if (endpoint.version() != version) throw versionConflict();
+        if ("X".equals(endpoint.endpointType())) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "CONNECTOR_RESERVED", "X Connector 仅保留未来契约，当前禁止探测");
+        }
         URI uri = URI.create(normalizeAndValidatePublicUrl(endpoint.url()));
         long started = System.nanoTime();
         Integer status = null;
@@ -125,6 +130,10 @@ public class SourceService {
     public SourceMapper.EndpointDetail changeStatus(UUID endpointId, String status, long version, AppUserPrincipal actor, HttpServletRequest request) {
         if (!Set.of("ACTIVE", "PAUSED").contains(status)) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_STATUS", "只允许启用或暂停入口");
         SourceMapper.EndpointDetail endpoint = requireEndpoint(endpointId);
+        if (endpoint.version() != version) throw versionConflict();
+        if ("ACTIVE".equals(status) && "X".equals(endpoint.endpointType())) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "CONNECTOR_RESERVED", "X Connector 仅保留未来契约，当前禁止启用");
+        }
         if ("ACTIVE".equals(status) && !Set.of("HEALTHY", "WARNING").contains(endpoint.healthStatus())) {
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "PROBE_REQUIRED", "启用前必须通过试抓取");
         }
@@ -151,10 +160,14 @@ public class SourceService {
                 Map.entry("autoPublish", "boolean"),
                 Map.entry("relevanceScore", "number:0..100"),
                 Map.entry("qualityScore", "number:0..100")));
-        schemas.put("GITHUB", Map.of("owner", "string", "repository", "string", "resource", "releases|commits|issues"));
-        schemas.put("ARXIV", Map.of("categories", "string[]"));
-        schemas.put("OPENREVIEW", Map.of("venueIds", "string[]"));
-        schemas.put("HACKER_NEWS", Map.of("feed", "top|new|best"));
+        schemas.put("GITHUB", Map.of("status", "AVAILABLE", "owner", "string", "repository", "string", "resource", "releases"));
+        schemas.put("ARXIV", Map.of("status", "AVAILABLE", "categories", "string[]"));
+        schemas.put("OPENREVIEW", Map.of("status", "AVAILABLE", "venueIds", "string[]"));
+        schemas.put("HACKER_NEWS", Map.of("status", "AVAILABLE", "feed", "search_by_date", "query", "string"));
+        schemas.put("X", Map.of(
+                "status", "RESERVED",
+                "activationAllowed", false,
+                "message", "当前不发请求、不探测、不启用、不调度；后续启用必须形成新的合规与成本决策"));
         return schemas;
     }
 
@@ -176,10 +189,13 @@ public class SourceService {
             validateIntegerConfig(c.config(), "maxResponseBytes", 1024, 10485760);
             validateIntegerConfig(c.config(), "maxItems", 1, 200);
             validateIntegerConfig(c.config(), "maxAttempts", 1, 10);
+            validateIntegerConfig(c.config(), "maxAgeHours", 1, 8760);
             validateNumberConfig(c.config(), "relevanceScore", BigDecimal.ZERO, new BigDecimal("100"));
             validateNumberConfig(c.config(), "qualityScore", BigDecimal.ZERO, new BigDecimal("100"));
+            validateNumberConfig(c.config(), "minScore", BigDecimal.ZERO, new BigDecimal("1000000"));
             validateBooleanConfig(c.config(), "respectRobots");
             validateBooleanConfig(c.config(), "autoPublish");
+            validateBooleanConfig(c.config(), "testRun");
             Object userAgent = c.config().get("userAgent");
             if (userAgent != null && (!(userAgent instanceof String value) || value.isBlank() || value.length() > 200)) {
                 invalid("Connector 配置 userAgent 必须是 1 到 200 字符的字符串");

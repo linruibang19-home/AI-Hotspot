@@ -2,7 +2,7 @@
 
 > 基线日期：2026-07-17
 > 基线标签：`planning-v1`
-> 后续里程碑标签：`prototype-v1`、`m1-foundation-v1`、`m2-identity-sources-v1`、`m3-rss-vertical-slice-v1`
+> 后续里程碑标签：`prototype-v1`、`m1-foundation-v1`、`m2-identity-sources-v1`、`m3-rss-vertical-slice-v1`、`m4-public-connectors-v1`
 
 ## 1. 仓库
 
@@ -56,4 +56,6 @@ git remote -v
 - `m2-identity-sources-v1`：M2 身份权限与信源管理本地里程碑标签；
 - `feat/m3-rss-vertical-slice`：M3 实现与验收任务分支；
 - `m3-rss-vertical-slice-v1`：M3 合并 `main` 后创建的本地里程碑标签；
+- `feat/m4-public-connectors`：M4 公开 Connector、正式信源目录、X 预留边界与验收任务分支；
+- `m4-public-connectors-v1`：M4 合并 `main` 后创建的本地里程碑标签；
 - 未配置 Git Remote，未 push、未创建远程 PR、未部署生产。

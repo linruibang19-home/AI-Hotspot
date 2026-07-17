@@ -59,7 +59,7 @@ function New-ActiveFeed {
         websiteUrl = $Definition.websiteUrl; endpointName = $Definition.endpointName
         endpointUrl = $endpointUrl; endpointType = $Definition.endpointType; language = 'en'
         pollingIntervalSeconds = 3600; displayPolicy = 'SUMMARY_ONLY'; indexPolicy = 'PUBLIC_RAG'
-        config = @{ autoPublish = $true; maxItems = 5; maxResponseBytes = 2097152; timeoutSeconds = 25; relevanceScore = 82; qualityScore = 78 }
+        config = @{ autoPublish = $true; maxItems = 5; maxResponseBytes = 2097152; timeoutSeconds = 25; relevanceScore = 82; qualityScore = 78; testRun = $true }
     }
     $probe = Invoke-JsonPost "$BaseUrl/admin/sources/endpoints/$($created.endpointId)/probe" $admin.Session $admin.Headers @{ version = 0 }
     if ($probe.healthStatus -notin @('HEALTHY', 'WARNING')) { throw "$($Definition.name) 探测失败：$($probe.message)" }
@@ -169,5 +169,8 @@ try {
     } | Format-List
 } finally {
     if ($rabbitStopped) { & docker compose start rabbitmq | Out-Null }
+    & docker compose exec -T postgres psql -U ai_hotspot -d ai_hotspot -c `
+        "update source.source_endpoint set status='ARCHIVED', next_fetch_at=null, updated_at=now() where catalog_kind='TEST' and status<>'ARCHIVED';" | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'M3 测试信源自动清理失败' }
     Pop-Location
 }

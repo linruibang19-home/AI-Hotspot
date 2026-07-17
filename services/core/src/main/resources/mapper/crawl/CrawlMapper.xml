@@ -6,7 +6,11 @@
                status, config::text as config_json, next_fetch_at
         from source.source_endpoint
         where status = 'ACTIVE'
-          and endpoint_type in ('RSS', 'ATOM')
+          and catalog_kind &lt;&gt; 'TEST'
+          and endpoint_type in (
+              'RSS', 'ATOM', 'WEBSITE', 'SITEMAP', 'GITHUB',
+              'HUGGING_FACE', 'ARXIV', 'OPENREVIEW', 'HACKER_NEWS'
+          )
           and (next_fetch_at is null or next_fetch_at &lt;= now())
         order by next_fetch_at nulls first, id
         for update skip locked

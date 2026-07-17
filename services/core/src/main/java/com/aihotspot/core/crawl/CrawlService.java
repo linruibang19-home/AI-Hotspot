@@ -20,6 +20,10 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class CrawlService {
 
+    private static final Set<String> AVAILABLE_CONNECTORS = Set.of(
+            "RSS", "ATOM", "WEBSITE", "SITEMAP", "GITHUB",
+            "HUGGING_FACE", "ARXIV", "OPENREVIEW", "HACKER_NEWS");
+
     private static final Set<String> JOB_STATUSES = Set.of(
             "QUEUED", "RUNNING", "WAITING_RETRY", "SUCCEEDED", "FAILED", "DEAD_LETTERED", "CANCELLED");
     private static final Set<String> REPLAY_STATUSES = Set.of("PENDING", "REPLAYED", "IGNORED");
@@ -162,8 +166,8 @@ public class CrawlService {
         if (!"ACTIVE".equals(endpoint.status())) {
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "SOURCE_ENDPOINT_NOT_ACTIVE", "只允许抓取 ACTIVE 入口");
         }
-        if (!Set.of("RSS", "ATOM").contains(endpoint.endpointType())) {
-            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "CONNECTOR_NOT_AVAILABLE", "M3 只支持 RSS/Atom 抓取");
+        if (!AVAILABLE_CONNECTORS.contains(endpoint.endpointType())) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "CONNECTOR_NOT_AVAILABLE", "该 Connector 当前不可采集");
         }
         return endpoint;
     }

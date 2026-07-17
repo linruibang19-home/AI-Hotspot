@@ -80,7 +80,7 @@ try {
         countryCode = 'CN'; officialLevel = 'COMMUNITY'; authorityScore = 10
         endpointName = 'Blocked localhost'; endpointUrl = 'http://127.0.0.1/feed'
         endpointType = 'RSS'; language = 'zh-CN'; pollingIntervalSeconds = 3600
-        displayPolicy = 'SUMMARY_ONLY'; indexPolicy = 'NO_INDEX'; config = @{}
+        displayPolicy = 'SUMMARY_ONLY'; indexPolicy = 'NO_INDEX'; config = @{ testRun = $true }
     }
     $blocked = Invoke-WebRequest -Method Post -Uri "$BaseUrl/admin/sources" -WebSession $admin.Session `
         -Headers $admin.Headers -ContentType 'application/json; charset=utf-8' `
@@ -93,7 +93,7 @@ try {
         websiteUrl = 'https://example.com'; endpointName = 'Example Website'
         endpointUrl = "https://example.com/?m2-smoke=$stamp"; endpointType = 'WEBSITE'; language = 'en'
         pollingIntervalSeconds = 3600; displayPolicy = 'SUMMARY_ONLY'
-        indexPolicy = 'PUBLIC_RAG'; config = @{}
+        indexPolicy = 'PUBLIC_RAG'; config = @{ testRun = $true }
     }
     $probe = Invoke-JsonPost "$BaseUrl/admin/sources/endpoints/$($created.endpointId)/probe" `
         $admin.Session $admin.Headers @{ version = 0 }
@@ -138,5 +138,8 @@ try {
         SourceAuditCount = @($sourceAudits).Count
     } | Format-List
 } finally {
+    & docker compose exec -T postgres psql -U ai_hotspot -d ai_hotspot -c `
+        "update source.source_endpoint set status='ARCHIVED', next_fetch_at=null, updated_at=now() where catalog_kind='TEST' and status<>'ARCHIVED';" | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'M2 测试信源自动清理失败' }
     Pop-Location
 }

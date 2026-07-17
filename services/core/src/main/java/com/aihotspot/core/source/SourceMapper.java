@@ -10,7 +10,10 @@ import org.apache.ibatis.annotations.Param;
 public interface SourceMapper {
 
     int insertEntity(SourceEntity entity);
+    int insertEntityIfAbsent(SourceEntity entity);
     int insertEndpoint(SourceEndpoint endpoint);
+    int insertEndpointIfAbsent(SourceEndpoint endpoint);
+    String findIdBySlug(@Param("slug") String slug);
     SourceDetail findById(@Param("id") UUID id);
     EndpointDetail findEndpointById(@Param("id") UUID id);
     List<SourceSummary> list(@Param("status") String status, @Param("query") String query, @Param("limit") int limit);
@@ -36,14 +39,15 @@ public interface SourceMapper {
             String endpointType, String connectorType, String language, int pollingIntervalSeconds,
             String displayPolicy, String indexPolicy, java.math.BigDecimal authorityOverride,
             String configJson, String credentialRef, String status, String healthStatus,
-            int failureCount, long version, UUID createdBy) {}
+            int failureCount, long version, UUID createdBy, String catalogKind, String catalogKey) {}
 
     record SourceSummary(
             UUID id, String name, String slug, String entityType, String officialLevel,
             java.math.BigDecimal authorityScore, String sourceStatus, UUID endpointId,
-            String endpointName, String endpointType, String endpointUrl, String endpointStatus,
+            String endpointName, String endpointType, String connectorType, String endpointUrl,
+            String endpointStatus, String catalogKind,
             String healthStatus, Instant lastSuccessAt, Instant lastFailureAt, long endpointVersion,
-            Instant updatedAt) {}
+            int lastFetchItemCount, long todayContentCount, Instant updatedAt) {}
 
     record SourceDetail(
             UUID id, String name, String slug, String entityType, String countryCode,
@@ -57,7 +61,9 @@ public interface SourceMapper {
             String displayPolicy, String indexPolicy, java.math.BigDecimal authorityOverride,
             String configJson, String credentialRef, String status, String healthStatus,
             Instant lastSuccessAt, Instant lastFailureAt, int failureCount, Integer lastProbeStatus,
-            Long lastProbeLatencyMs, long version, UUID createdBy, Instant createdAt, Instant updatedAt) {}
+            Long lastProbeLatencyMs, long version, UUID createdBy, String catalogKind,
+            String catalogKey, Instant createdAt, Instant updatedAt) {}
 
-    record SourceMetrics(long totalEndpoints, long activeEndpoints, long healthyEndpoints, long attentionEndpoints) {}
+    record SourceMetrics(long totalEndpoints, long activeEndpoints, long healthyEndpoints,
+                         long attentionEndpoints, long productionEndpoints, long testEndpoints) {}
 }

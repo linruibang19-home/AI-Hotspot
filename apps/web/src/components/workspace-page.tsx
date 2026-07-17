@@ -24,7 +24,7 @@ export function WorkspacePage({
       <PageHeader
         title={title}
         description={description}
-        action={<button className="button primary" type="button">{actionLabel}</button>}
+        action={<button className="button" type="button" disabled title="该业务将在对应后续里程碑接入真实数据与操作">{actionLabel} · 尚未接通</button>}
       />
       <section className="metric-grid" aria-label={`${title}概览`}>
         {metrics.map(([value, label]) => (
@@ -39,7 +39,7 @@ export function WorkspacePage({
           <article className="workspace-card" key={card.title}>
             <h2>{card.title}</h2>
             <p>{card.description}</p>
-            <span className="status-line">{card.status ?? "M1 Mock 数据"}</span>
+            <span className="status-line">{card.status ?? "方案占位 · 尚未接通业务"}</span>
           </article>
         ))}
       </section>

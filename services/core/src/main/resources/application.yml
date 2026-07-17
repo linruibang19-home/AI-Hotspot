@@ -101,6 +101,9 @@ ai-hotspot:
     email: ${BOOTSTRAP_ADMIN_EMAIL:}
     password: ${BOOTSTRAP_ADMIN_PASSWORD:}
     display-name: ${BOOTSTRAP_ADMIN_DISPLAY_NAME:AI Hotspot 管理员}
+  source-catalog:
+    enabled: ${SOURCE_CATALOG_ENABLED:false}
+    owner-email: ${SOURCE_CATALOG_OWNER_EMAIL:${BOOTSTRAP_ADMIN_EMAIL:}}
   security:
     login-max-failures: ${LOGIN_MAX_FAILURES:5}
     login-window-seconds: ${LOGIN_WINDOW_SECONDS:900}

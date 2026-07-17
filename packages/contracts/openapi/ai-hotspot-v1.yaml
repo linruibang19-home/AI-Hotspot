@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: AI Hotspot Core API
-  version: 0.3.0
-  description: M3 身份、信源、RSS/Atom 采集任务、死信回放与公开内容接口契约。
+  version: 0.4.0
+  description: M4 身份、正式信源目录、公开 Connector、死信回放与公开内容接口契约。
 servers:
   - url: /api/core
 tags:
@@ -10,7 +10,7 @@ tags:
   - { name: IdentityAdmin, description: 管理员账号与邀请码 }
   - { name: SourceAdmin, description: ADMIN/OPERATOR 信源管理 }
   - { name: AuditAdmin, description: 管理审计 }
-  - { name: CrawlAdmin, description: RSS/Atom 采集任务、调度与死信回放 }
+  - { name: CrawlAdmin, description: 公开 Connector 采集任务、调度与死信回放 }
   - { name: PublicContent, description: 游客可访问的已发布公开内容 }
   - { name: System, description: 健康检查与本地联调 }
 paths:
@@ -179,7 +179,7 @@ paths:
             schema: { $ref: "#/components/schemas/CreateSourceRequest" }
       responses:
         "200":
-          description: 创建 DRAFT 主体和入口；不允许 X/微信公众号，且执行 SSRF 安全校验。
+          description: 创建 DRAFT 主体和入口并执行 SSRF 安全校验；X 只能表达 RESERVED 草稿，禁止探测、启用和采集；不支持微信公众号。
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CreatedSource" }
@@ -519,7 +519,7 @@ components:
         logoUrl: { type: string, format: uri }
         endpointName: { type: string, maxLength: 120 }
         endpointUrl: { type: string, format: uri }
-        endpointType: { type: string, enum: [RSS, ATOM, WEBSITE, SITEMAP, GITHUB, HUGGING_FACE, ARXIV, OPENREVIEW, HACKER_NEWS, PUBLIC_MEDIA, PUBLIC_COMMUNITY] }
+        endpointType: { type: string, enum: [RSS, ATOM, WEBSITE, SITEMAP, GITHUB, HUGGING_FACE, ARXIV, OPENREVIEW, HACKER_NEWS, PUBLIC_MEDIA, PUBLIC_COMMUNITY, X] }
         language: { type: string }
         pollingIntervalSeconds: { type: integer, minimum: 300, maximum: 2592000 }
         displayPolicy: { type: string, enum: [FULLTEXT_ALLOWED, SUMMARY_ONLY, LINK_ONLY, HIDDEN] }
@@ -554,10 +554,12 @@ components:
         activeEndpoints: { type: integer }
         healthyEndpoints: { type: integer }
         attentionEndpoints: { type: integer }
+        productionEndpoints: { type: integer }
+        testEndpoints: { type: integer }
     SourceSummary:
       type: object
       additionalProperties: true
-      required: [id, name, slug, endpointId, endpointType, endpointStatus, healthStatus, endpointVersion]
+      required: [id, name, slug, endpointId, endpointType, connectorType, endpointStatus, catalogKind, healthStatus, endpointVersion, todayContentCount]
     SourceListResponse:
       type: object
       required: [metrics, items]

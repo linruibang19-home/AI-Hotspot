@@ -1,7 +1,8 @@
 import asyncio
 import hashlib
 
-from ai_hotspot_ai.feed import FetchRequest, fetch_feed, parse_feed
+from ai_hotspot_ai.connectors import accept_header, parse_connector
+from ai_hotspot_ai.feed import FetchRequest, fetch_feed
 from ai_hotspot_ai.providers.factory import get_provider_registry
 from ai_hotspot_ai.repository import (
     CONTENT_CONSUMER,
@@ -39,8 +40,9 @@ def process_crawl_event(payload: dict[str, object], settings: Settings) -> dict[
         ),
         user_agent=str(
             config.get("userAgent")
-            or "AI-Hotspot-RSS/0.3 (+https://aihotspot.local; contact=admin@aihotspot.local)"
+            or "AI-Hotspot-Connector/0.4 (+https://aihotspot.local; contact=admin@aihotspot.local)"
         )[:300],
+        accept=accept_header(context.endpoint_type),
     )
     response = fetch_feed(request)
     if response.status_code == 304:
@@ -49,9 +51,11 @@ def process_crawl_event(payload: dict[str, object], settings: Settings) -> dict[
         complete_inbox(payload, CRAWL_CONSUMER, result)
         return result
     content_hash = hashlib.sha256(response.content).hexdigest()
-    entries = parse_feed(
+    entries = parse_connector(
+        context.endpoint_type,
         response.content,
         response.final_url,
+        config,
         _bounded_int(config.get("maxItems"), 50, 1, 200),
     )
     stored = ArtifactStore(settings).put(
