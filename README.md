@@ -1,6 +1,6 @@
 # AI Hotspot
 
-AI Hotspot 是面向 AI 从业者的公开情报、研究、订阅与自动化产品。当前仓库已经完成 M0 方案与正式原型、M1 工程与基础设施，下一阶段为 M2 邀请制身份、权限与信源管理。
+AI Hotspot 是面向 AI 从业者的公开情报、研究、订阅与自动化产品。当前仓库已经完成 M0 方案与正式原型、M1 工程与基础设施、M2 身份权限与信源管理，下一阶段为 M3 RSS/Atom 真实垂直闭环。
 
 ## 工程结构
 
@@ -63,6 +63,14 @@ Compose 已启动时，可执行 M1 端到端 Smoke：
 
 该脚本验证 Nginx、Core Outbox、RabbitMQ、Worker Inbox 幂等和 SMTP→Mailpit 链路。
 
+执行 M2 身份、权限、SSRF、信源探测和审计 Smoke：
+
+```powershell
+./scripts/Test-M2-Smoke.ps1
+```
+
+本地引导管理员默认使用 `.env` 中的 `BOOTSTRAP_ADMIN_EMAIL` 和 `BOOTSTRAP_ADMIN_PASSWORD`。首次启动后应立即修改生产环境凭据；邀请码明文只在创建响应中返回一次。
+
 单独执行：
 
 ```powershell
@@ -87,6 +95,6 @@ docker compose --env-file .env.example config --quiet
 - 不开放公众自由注册；
 - 不支持用户自带模型密钥；
 - 不使用 Kubernetes、Kafka 或 Elasticsearch；
-- M1 只建立可靠工程底座；页面中的 Mock 数据不代表 M2～M9 业务已实现。
+- M2 已实现身份、权限、邀请和信源管理；采集、内容、事件、RAG、邮件订阅和 Agent 仍按 M3～M9 逐步实现。
 
 详细进度见 [项目进度与剩余任务](./AI%20Hotspot%20项目方案/00%20项目总览/项目进度与剩余任务.md)。
