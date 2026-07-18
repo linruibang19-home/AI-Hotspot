@@ -24,4 +24,14 @@ public class DatabaseUserDetailsService implements UserDetailsService {
                 account.id(), account.email(), account.displayName(), account.passwordHash(), account.status(),
                 mapper.findRoleCodes(account.id()), mapper.findPermissionCodes(account.id()));
     }
+
+    public AppUserPrincipal loadActivePrincipal(String email) {
+        IdentityMapper.UserAccount account = mapper.findUserByEmail(email.strip().toLowerCase());
+        if (account == null || !"ACTIVE".equals(account.status())) {
+            throw new UsernameNotFoundException("账号不存在或不可用");
+        }
+        return new AppUserPrincipal(
+                account.id(), account.email(), account.displayName(), account.passwordHash(), account.status(),
+                mapper.findRoleCodes(account.id()), mapper.findPermissionCodes(account.id()));
+    }
 }

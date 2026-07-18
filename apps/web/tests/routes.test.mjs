@@ -22,6 +22,7 @@ const expectedPages = [
   "src/app/admin/users/page.tsx",
   "src/app/admin/sources/[id]/page.tsx",
   "src/app/login/page.tsx",
+  "src/app/register/page.tsx",
   "src/app/invite/[token]/page.tsx",
 ];
 
@@ -76,6 +77,15 @@ test("report routes render the real Core report API", () => {
   assert.doesNotMatch(view, /\b(?:688|919|148)\b/);
 });
 
+test("public email-code registration and login are discoverable", () => {
+  const login = readFileSync("src/app/login/page.tsx", "utf8");
+  const register = readFileSync("src/app/register/page.tsx", "utf8");
+  assert.match(login, /\/auth\/code-login/);
+  assert.match(login, /\/register/);
+  assert.match(register, /\/auth\/email-codes/);
+  assert.match(register, /\/auth\/register/);
+});
+
 test("topic cards navigate to real public-content filters", () => {
   const page = readFileSync("src/app/topics/page.tsx", "utf8");
   const topics = readFileSync("src/lib/topics.ts", "utf8");
@@ -115,13 +125,15 @@ test("authenticated workspaces enforce a page-level session guard", () => {
   assert.match(workspaces, /onClick=.*setNotice/);
 });
 
-test("approved prototype navigation stays discoverable without weakening route permissions", () => {
+test("navigation preserves public workspaces and hides management links from regular users", () => {
   const sidebar = readFileSync("src/components/sidebar.tsx", "utf8");
   const navigation = readFileSync("src/lib/navigation.ts", "utf8");
   assert.match(navigation, /label: "智能"/);
   assert.match(navigation, /label: "管理"/);
   assert.match(sidebar, /returnTo=/);
-  assert.doesNotMatch(sidebar, /items\.filter\(\(item\) => canSee/);
+  assert.match(sidebar, /items\.filter\(\(item\) => canSeeNavigationItem/);
+  assert.match(sidebar, /access === "operator".*isOperator/s);
+  assert.match(sidebar, /filter\(\(group\) => group\.items\.length > 0\)/);
 });
 
 test("featured view uses the approved source taxonomy and real public content", () => {

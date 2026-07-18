@@ -54,6 +54,44 @@
         update iam.user_account set last_login_at = now(), updated_at = now() where id = #{userId}
     </update>
 
+    <update id="invalidateEmailChallenges">
+        update iam.email_verification_challenge
+        set consumed_at = now()
+        where email = #{email} and purpose = #{purpose} and consumed_at is null
+    </update>
+
+    <insert id="insertEmailChallenge">
+        insert into iam.email_verification_challenge (
+            id, email, purpose, code_hash, expires_at, consumed_at,
+            failed_attempts, max_attempts, requested_ip_hash, created_at
+        ) values (
+            #{id}, #{email}, #{purpose}, #{codeHash}, #{expiresAt}, #{consumedAt},
+            #{failedAttempts}, #{maxAttempts}, #{requestedIpHash}, #{createdAt}
+        )
+    </insert>
+
+    <select id="findEmailChallengeForUpdate" resultType="com.aihotspot.core.auth.IdentityMapper$EmailChallenge">
+        select id, email::text as email, purpose, code_hash, expires_at, consumed_at,
+               failed_attempts, max_attempts, requested_ip_hash, created_at
+        from iam.email_verification_challenge
+        where email = #{email} and purpose = #{purpose}
+        order by created_at desc
+        limit 1
+        for update
+    </select>
+
+    <update id="recordEmailChallengeFailure">
+        update iam.email_verification_challenge
+        set failed_attempts = least(failed_attempts + 1, max_attempts)
+        where id = #{id} and consumed_at is null
+    </update>
+
+    <update id="consumeEmailChallenge">
+        update iam.email_verification_challenge
+        set consumed_at = now()
+        where id = #{id} and consumed_at is null and expires_at &gt; now() and failed_attempts &lt; max_attempts
+    </update>
+
     <insert id="insertInvitation">
         insert into iam.invitation_code (
             id, code_hash, created_by, default_role, max_uses, used_count,

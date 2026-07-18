@@ -26,6 +26,16 @@ public interface IdentityMapper {
 
     int updateLastLogin(@Param("userId") UUID userId);
 
+    int invalidateEmailChallenges(@Param("email") String email, @Param("purpose") String purpose);
+
+    int insertEmailChallenge(EmailChallenge challenge);
+
+    EmailChallenge findEmailChallengeForUpdate(@Param("email") String email, @Param("purpose") String purpose);
+
+    int recordEmailChallengeFailure(@Param("id") UUID id);
+
+    int consumeEmailChallenge(@Param("id") UUID id);
+
     int insertInvitation(Invitation invitation);
 
     Invitation findInvitationForUpdate(@Param("codeHash") String codeHash);
@@ -60,6 +70,18 @@ public interface IdentityMapper {
             Instant expiresAt,
             String status,
             long version,
+            Instant createdAt) {}
+
+    record EmailChallenge(
+            UUID id,
+            String email,
+            String purpose,
+            String codeHash,
+            Instant expiresAt,
+            Instant consumedAt,
+            int failedAttempts,
+            int maxAttempts,
+            String requestedIpHash,
             Instant createdAt) {}
 
     record AdminUserView(

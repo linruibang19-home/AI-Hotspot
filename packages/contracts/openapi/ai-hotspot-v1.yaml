@@ -1,12 +1,12 @@
 openapi: 3.1.0
 info:
   title: AI Hotspot Core API
-  version: 0.4.1
-  description: M4 身份、正式信源目录、公开 Connector、死信回放、公开内容与实时报告接口契约。
+  version: 0.5.0
+  description: M5 公开邮箱验证码注册/登录、身份权限、正式信源目录、内容治理与公开内容接口契约。
 servers:
   - url: /api/core
 tags:
-  - { name: Auth, description: 会话认证与邀请注册 }
+  - { name: Auth, description: 邮箱验证码注册/登录、管理员密码登录与会话认证 }
   - { name: IdentityAdmin, description: 管理员账号与邀请码 }
   - { name: SourceAdmin, description: ADMIN/OPERATOR 信源管理 }
   - { name: AuditAdmin, description: 管理审计 }
@@ -54,6 +54,57 @@ paths:
               schema: { $ref: "#/components/schemas/CurrentUser" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/auth/email-codes:
+    post:
+      tags: [Auth]
+      operationId: requestEmailCode
+      security: []
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailCodeRequest" }
+      responses:
+        "200": { description: 为避免账号枚举，无论邮箱状态均返回统一接受响应。 }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      operationId: registerWithEmailCode
+      security: []
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublicRegisterRequest" }
+      responses:
+        "200":
+          description: 注册普通用户并建立 Session。
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CurrentUser" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/v1/auth/code-login:
+    post:
+      tags: [Auth]
+      operationId: loginWithEmailCode
+      security: []
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeLoginRequest" }
+      responses:
+        "200":
+          description: 邮箱验证码登录成功并建立 Session。
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CurrentUser" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
   /api/v1/auth/logout:
     post:
       tags: [Auth]
@@ -460,6 +511,25 @@ components:
       properties:
         email: { type: string, format: email }
         password: { type: string, writeOnly: true }
+    EmailCodeRequest:
+      type: object
+      required: [email, purpose]
+      properties:
+        email: { type: string, format: email }
+        purpose: { type: string, enum: [REGISTER, LOGIN] }
+    CodeLoginRequest:
+      type: object
+      required: [email, code]
+      properties:
+        email: { type: string, format: email }
+        code: { type: string, pattern: "^[0-9]{6}$", writeOnly: true }
+    PublicRegisterRequest:
+      type: object
+      required: [email, displayName, code]
+      properties:
+        email: { type: string, format: email }
+        displayName: { type: string, minLength: 2, maxLength: 80 }
+        code: { type: string, pattern: "^[0-9]{6}$", writeOnly: true }
     RegisterRequest:
       type: object
       required: [email, displayName, password]

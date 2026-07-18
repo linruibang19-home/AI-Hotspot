@@ -109,3 +109,8 @@ ai-hotspot:
     login-window-seconds: ${LOGIN_WINDOW_SECONDS:900}
     invitation-max-attempts: ${INVITATION_MAX_ATTEMPTS:10}
     invitation-window-seconds: ${INVITATION_WINDOW_SECONDS:3600}
+    email-code-pepper: ${EMAIL_CODE_PEPPER:ai-hotspot-local-email-code-pepper}
+    email-code-lifetime-seconds: ${EMAIL_CODE_LIFETIME_SECONDS:600}
+    email-code-max-attempts: ${EMAIL_CODE_MAX_ATTEMPTS:5}
+    email-code-max-requests: ${EMAIL_CODE_MAX_REQUESTS:5}
+    email-code-window-seconds: ${EMAIL_CODE_WINDOW_SECONDS:900}

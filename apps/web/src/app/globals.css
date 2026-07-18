@@ -652,6 +652,52 @@ a {
   font-size: 12px;
 }
 
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 22px;
+  padding: 4px;
+  border-radius: 9px;
+  background: var(--surface-muted);
+}
+
+.auth-tabs button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.auth-tabs button.active {
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 750;
+  box-shadow: 0 1px 4px rgb(15 42 52 / 10%);
+}
+
+.code-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  gap: 8px;
+}
+
+.code-field button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.code-field button:disabled { color: var(--muted); cursor: not-allowed; }
+.auth-inline-link { margin-left: 5px; color: var(--accent); font-weight: 700; }
+.sidebar-auth-links { display: flex; justify-content: center; gap: 12px; }
+
 .form-stack,
 .source-form {
   display: grid;

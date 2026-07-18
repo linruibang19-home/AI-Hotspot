@@ -102,6 +102,25 @@ public class IdentityService {
     }
 
     @Transactional
+    public IdentityMapper.UserAccount registerPublic(
+            String email, String displayName, String code, EmailVerificationService verificationService,
+            HttpServletRequest request) {
+        String normalizedEmail = normalizeEmail(email);
+        verificationService.verifyAndConsume(normalizedEmail, "REGISTER", code);
+        if (mapper.findUserByEmail(normalizedEmail) != null) {
+            throw new ApiException(HttpStatus.CONFLICT, "EMAIL_EXISTS", "该邮箱已存在，请直接登录");
+        }
+        UUID id = UUID.randomUUID();
+        mapper.insertUser(new IdentityMapper.UserAccount(
+                id, normalizedEmail, displayName.strip(), null, "ACTIVE", "zh-CN",
+                "Asia/Shanghai", 0, null, Instant.now(), Instant.now(), null));
+        mapper.assignRole(id, "USER", null);
+        audit.record(id, "PUBLIC_EMAIL_REGISTERED", "USER_ACCOUNT", id, null,
+                json(Map.of("email", normalizedEmail, "role", "USER")), request);
+        return mapper.findUserById(id);
+    }
+
+    @Transactional
     public void markLogin(UUID userId) {
         mapper.updateLastLogin(userId);
     }

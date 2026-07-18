@@ -141,3 +141,26 @@ def test_github_connector_accepts_tags_api_shape():
     )
     assert entries[0].title == "v3.0.0"
     assert entries[0].original_url == "https://github.com/org/repo/releases/tag/v3.0.0"
+
+
+def test_github_connector_accepts_commits_api_shape():
+    payload = [
+        {
+            "sha": "abc123",
+            "html_url": "https://github.com/org/repo/commit/abc123",
+            "commit": {
+                "message": "feat: publish an AI agent update\n\nDetails",
+                "author": {"name": "Maintainer", "date": "2026-07-18T08:00:00Z"},
+            },
+        }
+    ]
+    entries = parse_connector(
+        "GITHUB",
+        json.dumps(payload).encode(),
+        "https://api.github.com/repos/org/repo/commits?per_page=20",
+        {},
+        10,
+    )
+    assert entries[0].title == "feat: publish an AI agent update"
+    assert entries[0].author_name == "Maintainer"
+    assert entries[0].original_url.endswith("/commit/abc123")

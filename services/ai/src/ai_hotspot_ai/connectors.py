@@ -151,24 +151,34 @@ def _parse_github(content: bytes, base_url: str, max_items: int) -> list[FeedEnt
         if not isinstance(row, dict):
             continue
         commit = row.get("commit") if isinstance(row.get("commit"), dict) else {}
-        title_value = row.get("name") or row.get("tag_name") or commit.get("sha")
+        commit_message = str(commit.get("message") or "").partition("\n")[0]
+        title_value = (
+            row.get("name")
+            or row.get("tag_name")
+            or commit_message
+            or row.get("sha")
+            or commit.get("sha")
+        )
         title = strip_markup(str(title_value or ""), 600)
         url = canonicalize_url(row.get("html_url"), base_url)
         if not url and row.get("name") and "/tags" in base_url:
             repository_url = base_url.split("/repos/", 1)[-1].split("/tags", 1)[0]
             url = f"https://github.com/{repository_url}/releases/tag/{row['name']}"
-        external = str(row.get("id") or row.get("tag_name") or commit.get("sha") or url or "")
+        external = str(
+            row.get("id") or row.get("tag_name") or row.get("sha") or commit.get("sha") or url or ""
+        )
         if not external or not title:
             continue
         author = row.get("author") if isinstance(row.get("author"), dict) else {}
+        commit_author = commit.get("author") if isinstance(commit.get("author"), dict) else {}
         entries.append(
             _entry(
                 external,
                 url,
                 title,
                 strip_markup(row.get("body")),
-                _parse_datetime(row.get("published_at")),
-                author.get("login"),
+                _parse_datetime(row.get("published_at") or commit_author.get("date")),
+                author.get("login") or commit_author.get("name"),
                 row,
             )
         )

@@ -37,12 +37,19 @@ export function Sidebar() {
     return href;
   };
 
+  const canSeeNavigationItem = (access?: "authenticated" | "operator" | "admin") => {
+    if (!access || access === "authenticated") return true;
+    if (access === "operator") return isOperator;
+    return isAdmin;
+  };
+
   const prototypeNavigation = navigation
     .filter((group) => group.label !== "更多")
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => item.href !== "/admin/users"),
-    }));
+      items: group.items.filter((item) => canSeeNavigationItem(item.access)),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <aside className="sidebar" aria-label="主导航">
@@ -82,7 +89,7 @@ export function Sidebar() {
             <button className="sidebar-account" type="button" onClick={() => void logout()}>退出登录</button>
           </>
         ) : (
-          <Link className="sidebar-account" href="/login?returnTo=%2Fadmin%2Fsources">进入管理端</Link>
+          <span className="sidebar-auth-links"><Link className="sidebar-account" href="/login">登录</Link><Link className="sidebar-account" href="/register">注册</Link></span>
         )}
       </div>
     </aside>

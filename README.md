@@ -92,7 +92,13 @@ Compose 已启动时，可执行 M1 端到端 Smoke：
 ./scripts/Test-M5-Smoke.ps1
 ```
 
-本地引导管理员默认使用 `.env` 中的 `BOOTSTRAP_ADMIN_EMAIL` 和 `BOOTSTRAP_ADMIN_PASSWORD`。首次启动后应立即修改生产环境凭据；邀请码明文只在创建响应中返回一次。
+普通用户可在 `http://localhost:3000/register` 使用邮箱验证码注册，并在登录页使用邮箱验证码免密登录。本地验证码邮件在 Mailpit（`http://localhost:8025`）查看。引导管理员仍使用 `.env` 中的 `BOOTSTRAP_ADMIN_EMAIL` 和 `BOOTSTRAP_ADMIN_PASSWORD`；首次启动后必须修改生产环境凭据。
+
+执行公开邮箱注册、Session 与验证码登录 Smoke：
+
+```powershell
+./scripts/Test-Email-Auth-Smoke.ps1
+```
 
 单独执行：
 
@@ -115,9 +121,11 @@ docker compose --env-file .env.example config --quiet
 ## 当前范围
 
 - 当前不采集 X 或微信公众号；X 仅保留不可启用、不可调度的 Connector 契约，微信公众号仍不进入范围；
-- 不开放公众自由注册；
+- 普通用户开放邮箱验证码注册与登录；管理端仍只允许 ADMIN/OPERATOR 角色进入；
 - 不支持用户自带模型密钥；
 - 不使用 Kubernetes、Kafka 或 Elasticsearch；
-- M4 已实现 RSS/Atom、Website、Sitemap、GitHub、arXiv、Hacker News 等公开 Connector，首批 19 个正式 Endpoint 中 17 个已真实运行、2 个因上游可用性暂停；M5 已实现内容质量与事件治理；报告编辑发布、RAG、邮件投递和 Agent 后端仍按 M6～M9 逐步实现。
+- 已实现 RSS/Atom、Website、Sitemap、GitHub、arXiv、Hacker News 等公开 Connector；正式目录现有 82 个 Endpoint，79 个启用，3 个因上游接口限制或已有稳定替代源而明确暂停。M5 已实现内容质量与事件治理；报告编辑发布、RAG、订阅投递和 Agent 后端仍按 M6～M9 逐步实现。
+
+数据库、中间件端口和 Navicat 连接方式见 [本地中间件与数据库连接指南](./AI%20Hotspot%20项目方案/10%20测试运维与质量保障/本地中间件与数据库连接指南.md)。
 
 详细进度见 [项目进度与剩余任务](./AI%20Hotspot%20项目方案/00%20项目总览/项目进度与剩余任务.md)。

@@ -45,7 +45,13 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionFixation(fixation -> fixation.migrateSession()))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/api/v1/health", "/actuator/health/**", "/api/v1/public/**").permitAll()
-                        .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/login", "/api/v1/auth/invitations/*/register").permitAll()
+                        .requestMatchers(
+                                "/api/v1/auth/csrf",
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/code-login",
+                                "/api/v1/auth/email-codes",
+                                "/api/v1/auth/register",
+                                "/api/v1/auth/invitations/*/register").permitAll()
                         .requestMatchers("/api/v1/system/smoke/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/admin/**").authenticated()
                         .anyRequest().authenticated())
