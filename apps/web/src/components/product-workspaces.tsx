@@ -4,6 +4,20 @@ import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
 
+const agentTemplates = [
+  { name: "研究 Agent", code: "R", description: "搜索、比较、构建时间线并生成带引用的专题报告。" },
+  { name: "订阅 Agent", code: "S", description: "把自然语言需求转成结构化订阅，并按计划推送。" },
+  { name: "信源运营 Agent", code: "S", description: "检测信源类型、试抓取、查重并推荐配置。" },
+  { name: "采集运维 Agent", code: "O", description: "分析采集失败、结构变化与任务积压，给出修复建议。" },
+];
+
+const recentAgentRuns = [
+  { task: "生成 Agent 框架近 30 天对比报告", agent: "研究 Agent", status: "已完成", duration: "1m 48s", tokens: "12.4k", tone: "success" },
+  { task: "每天 09:00 推送 AI 编码精选", agent: "订阅 Agent", status: "等待确认", duration: "18s", tokens: "1.2k", tone: "warning" },
+  { task: "试抓取 OpenAI News", agent: "信源运营", status: "已完成", duration: "9s", tokens: "0.8k", tone: "success" },
+  { task: "诊断机器之心列表解析异常", agent: "采集运维", status: "运行中", duration: "42s", tokens: "2.6k", tone: "success" },
+];
+
 export function SubscriptionWorkspace() {
   const [frequency, setFrequency] = useState("每日");
   return <div className="page-shell"><PageHeader title="订阅与邮件" description="每日与每周简报，按主题、来源和时间送达。" action={<button className="button primary" type="button">新建订阅</button>} />
@@ -22,9 +36,10 @@ export function ResearchWorkspace() {
 }
 
 export function AgentWorkspace() {
-  const [tab, setTab] = useState("模板");
-  return <div className="page-shell agent-page"><PageHeader title="Agent 工作台" description="使用受控工具完成研究、订阅运营和采集诊断。" action={<button className="button primary" type="button">创建任务</button>} />
-    <div className="agent-toolbar"><div className="tabs">{["模板", "运行记录", "等待审批"].map((item) => <button className={`tab tab-button ${tab === item ? "active" : ""}`} onClick={() => setTab(item)} type="button" key={item}>{item}</button>)}</div><span>Mock Provider · 开发模式</span></div>
-    {tab === "模板" ? <section className="agent-grid">{[{name:"研究 Agent",desc:"搜索、比较、构建时间线并生成带引用报告。",icon:"research" as const},{name:"订阅 Agent",desc:"把自然语言需求转换成可确认的结构化订阅。",icon:"mail" as const},{name:"采集运维 Agent",desc:"分析信源失败、结构变化、队列积压并给出处理建议。",icon:"activity" as const}].map((item) => <article className="agent-template" key={item.name}><Icon name={item.icon} /><h2>{item.name}</h2><p>{item.desc}</p><button className="button" type="button">使用模板 <Icon name="arrow" /></button></article>)}</section> : <section className="product-panel agent-empty"><Icon name={tab === "等待审批" ? "review" : "activity"} /><h2>{tab === "等待审批" ? "当前没有待审批工具调用" : "还没有 Agent 运行记录"}</h2><p>创建任务后，可在这里查看计划、步骤、工具、引用和运行状态。</p></section>}
+  const [notice, setNotice] = useState("");
+  return <div className="page-shell agent-page"><PageHeader title="Agent 工作台" description="使用受控工具完成研究、订阅、信源运营和采集故障诊断。" action={<button className="button primary" onClick={() => setNotice("已打开任务创建流程（前端原型演示）")} type="button">＋ 创建任务</button>} />
+    <section className="agent-grid">{agentTemplates.map((item) => <article className="agent-template" key={item.name}><span className="agent-avatar">{item.code}</span><h2>{item.name}</h2><p>{item.description}</p><button className="button" onClick={() => setNotice(`已选择${item.name}，等待后续业务流程接入`)} type="button">启动 Agent</button></article>)}</section>
+    <section className="product-panel agent-run-table"><header><h2>最近运行</h2></header><div className="agent-run-head"><span>任务</span><span>Agent</span><span>状态</span><span>耗时</span><span>Token</span><span /></div>{recentAgentRuns.map((run) => <div className="agent-run-row" key={run.task}><strong>{run.task}</strong><span>{run.agent}</span><span className={`agent-run-status ${run.tone}`}>{run.status}</span><span>{run.duration}</span><span>{run.tokens}</span><button className="agent-run-open" aria-label={`查看 ${run.task}`} onClick={() => setNotice(`已打开“${run.task}”运行详情（前端原型演示）`)} type="button"><Icon name="arrow" /></button></div>)}</section>
+    {notice ? <div className="agent-toast" role="status"><span>{notice}</span><button aria-label="关闭提示" onClick={() => setNotice("")} type="button">×</button></div> : null}
   </div>;
 }
