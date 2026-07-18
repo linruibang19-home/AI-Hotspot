@@ -40,7 +40,7 @@ export function PublicContentCard({ item, showReason, compact = false }: { item:
         <FavoriteButton id={item.id} />
       </div>
       <h2><Link href={`/content/${item.id}`}>{item.title}</Link></h2>
-      <p>{item.summary ?? "该条目已通过公开准入，摘要正在补充。"}</p>
+      <p>{truncateSummary(item.summary, compact ? 280 : 460)}</p>
       <div className="tag-list">
         <span># {contentTypeLabels[item.contentType] ?? item.contentType}</span>
         <span># {officialLabels[item.sourceOfficialLevel]}信源</span>
@@ -50,4 +50,9 @@ export function PublicContentCard({ item, showReason, compact = false }: { item:
       ) : null}
     </article>
   );
+}
+
+function truncateSummary(summary: string | null, limit: number) {
+  const value = summary?.trim() || "该条目已通过公开准入，摘要正在补充。";
+  return value.length > limit ? `${value.slice(0, limit).trimEnd()}…` : value;
 }

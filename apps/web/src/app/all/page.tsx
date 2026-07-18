@@ -11,7 +11,7 @@ export default async function AllPage({ searchParams }: { searchParams: Promise<
   return (
     <div className="page-shell">
       <PageHeader title="全部 AI 动态" description={`${today} · AI 相关资讯全量信息流`} />
-      <PublicFeed items={page.items} initialQuery={query} />
+      <PublicFeed items={page.items} nextCursor={page.nextCursor} hasMore={page.hasMore} initialQuery={query} />
     </div>
   );
 }

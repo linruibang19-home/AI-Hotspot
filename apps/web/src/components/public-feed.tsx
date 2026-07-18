@@ -4,7 +4,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import Link from "next/link";
 import { PublicContentCard } from "@/components/public-content-card";
 import { Icon } from "@/components/icons";
-import type { PublicContent } from "@/lib/public-content";
+import type { PublicContent, PublicContentPage } from "@/lib/public-content";
 
 type SourceFilter = "ALL" | "OFFICIAL" | "MEDIA" | "RESEARCH" | "COMMUNITY";
 
@@ -18,29 +18,60 @@ const sourceFilters: Array<[SourceFilter, string]> = [
 
 export function PublicFeed({
   items,
+  nextCursor: initialNextCursor = null,
+  hasMore: initialHasMore = false,
   featured = false,
   initialQuery = "",
 }: {
   items: PublicContent[];
+  nextCursor?: string | null;
+  hasMore?: boolean;
   featured?: boolean;
   initialQuery?: string;
 }) {
+  const [loadedItems, setLoadedItems] = useState(items);
+  const [nextCursor, setNextCursor] = useState(initialNextCursor);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [featuredFilter, setFeaturedFilter] = useState<SourceFilter>("ALL");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("ALL");
   const [contentType, setContentType] = useState("ALL");
   const [query, setQuery] = useState(initialQuery);
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("zh-CN"));
 
-  const visible = useMemo(() => items.filter((item) => {
+  const visible = useMemo(() => loadedItems.filter((item) => {
     const haystack = `${item.title} ${item.originalTitle} ${item.summary ?? ""} ${item.sourceName}`.toLocaleLowerCase("zh-CN");
     if (deferredQuery && !haystack.includes(deferredQuery)) return false;
     if (featured) return matchesSource(item, featuredFilter);
     if (!matchesSource(item, sourceFilter)) return false;
     return contentType === "ALL" || item.contentType === contentType;
-  }), [contentType, deferredQuery, featured, featuredFilter, items, sourceFilter]);
+  }), [contentType, deferredQuery, featured, featuredFilter, loadedItems, sourceFilter]);
 
   const groups = useMemo(() => groupByDate(visible), [visible]);
-  const types = useMemo(() => [...new Set(items.map((item) => item.contentType))], [items]);
+  const types = useMemo(() => [...new Set(loadedItems.map((item) => item.contentType))], [loadedItems]);
+
+  async function loadMore() {
+    if (!hasMore || !nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setLoadError("");
+    try {
+      const suffix = featured ? "/featured" : "";
+      const response = await fetch(`/api/core/api/v1/public/contents${suffix}?limit=20&cursor=${encodeURIComponent(nextCursor)}`, { cache: "no-store" });
+      if (!response.ok) throw new Error(`加载失败（${response.status}）`);
+      const page = await response.json() as PublicContentPage;
+      setLoadedItems((current) => {
+        const existingIds = new Set(current.map((item) => item.id));
+        return [...current, ...page.items.filter((item) => !existingIds.has(item.id))];
+      });
+      setNextCursor(page.nextCursor);
+      setHasMore(page.hasMore);
+    } catch (reason) {
+      setLoadError(reason instanceof Error ? reason.message : "加载更多失败");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return (
     <>
@@ -78,6 +109,8 @@ export function PublicFeed({
           </div>
         </section>
       ))}
+      {loadError ? <div className="load-more-error" role="alert">{loadError}</div> : null}
+      {hasMore ? <div className="load-more"><button className="button" type="button" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "正在加载…" : "加载更多内容"}</button></div> : null}
     </>
   );
 }

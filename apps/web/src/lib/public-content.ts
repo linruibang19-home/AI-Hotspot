@@ -17,7 +17,7 @@ export type PublicContent = {
   publishedAt: string;
 };
 
-type PublicContentPage = {
+export type PublicContentPage = {
   items: PublicContent[];
   nextCursor: string | null;
   hasMore: boolean;
@@ -27,7 +27,8 @@ const coreApi = process.env.CORE_API_INTERNAL_URL ?? "http://127.0.0.1:8080";
 
 export async function getPublicContents(featured = false): Promise<PublicContentPage> {
   const suffix = featured ? "/featured" : "";
-  const response = await fetch(`${coreApi}/api/v1/public/contents${suffix}?limit=50`, {
+  const limit = featured ? 12 : 20;
+  const response = await fetch(`${coreApi}/api/v1/public/contents${suffix}?limit=${limit}`, {
     cache: "no-store",
   });
   if (!response.ok) throw new Error(`公开内容服务暂时不可用（${response.status}）`);
@@ -40,4 +41,3 @@ export async function getPublicContent(id: string): Promise<PublicContent | null
   if (!response.ok) throw new Error(`公开内容服务暂时不可用（${response.status}）`);
   return response.json() as Promise<PublicContent>;
 }
-

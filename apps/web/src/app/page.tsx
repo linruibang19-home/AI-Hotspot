@@ -16,7 +16,7 @@ export default async function FeaturedPage() {
         description={`${today} · AI 自动挑选的高价值公开内容`}
         action={<div className="header-actions"><Link className="button" href="/reports?period=DAILY"><Icon name="download" />导出日报</Link><Link className="button primary" href="/research">进入知识库</Link></div>}
       />
-      <PublicFeed items={page.items} featured />
+      <PublicFeed items={page.items} nextCursor={page.nextCursor} hasMore={page.hasMore} featured />
     </div>
   );
 }

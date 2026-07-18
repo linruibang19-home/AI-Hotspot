@@ -71,6 +71,8 @@ test("report routes render the real Core report API", () => {
   assert.match(page, /getPublicReport/);
   assert.match(api, /\/api\/v1\/public\/reports/);
   assert.match(view, /report\.storyCount/);
+  assert.match(view, /REPORT_SECTION_LIMIT/);
+  assert.match(view, /truncateSummary/);
   assert.doesNotMatch(view, /\b(?:688|919|148)\b/);
 });
 
@@ -94,6 +96,25 @@ test("M5 content governance uses real queues, events and ticket APIs", () => {
   assert.doesNotMatch(page, /WorkspacePage/);
 });
 
+test("direct Web access proxies authenticated Core API requests", () => {
+  const proxy = readFileSync("src/app/api/core/[...path]/route.ts", "utf8");
+  assert.match(proxy, /CORE_API_INTERNAL_URL/);
+  assert.match(proxy, /path\.slice\(2\)/);
+  assert.match(proxy, /request\.arrayBuffer/);
+  assert.match(proxy, /getSetCookie/);
+  assert.match(proxy, /cache-control/);
+});
+
+test("authenticated workspaces enforce a page-level session guard", () => {
+  const workspaces = readFileSync("src/components/product-workspaces.tsx", "utf8");
+  assert.match(workspaces, /function ProtectedWorkspace/);
+  assert.match(workspaces, /useAuth/);
+  assert.match(workspaces, /需要登录/);
+  assert.match(workspaces, /returnTo=/);
+  assert.match(workspaces, /WorkspaceNotice/);
+  assert.match(workspaces, /onClick=.*setNotice/);
+});
+
 test("approved prototype navigation stays discoverable without weakening route permissions", () => {
   const sidebar = readFileSync("src/components/sidebar.tsx", "utf8");
   const navigation = readFileSync("src/lib/navigation.ts", "utf8");
@@ -112,4 +133,14 @@ test("featured view uses the approved source taxonomy and real public content", 
   assert.match(feed, /\["RESEARCH", "论文"\]/);
   assert.match(feed, /\["COMMUNITY", "社区"\]/);
   assert.doesNotMatch(feed, /个独立信源/);
+});
+
+test("public feeds use cursor pagination instead of hydrating fifty cards", () => {
+  const api = readFileSync("src/lib/public-content.ts", "utf8");
+  const feed = readFileSync("src/components/public-feed.tsx", "utf8");
+  const card = readFileSync("src/components/public-content-card.tsx", "utf8");
+  assert.doesNotMatch(api, /limit=50/);
+  assert.match(feed, /加载更多内容/);
+  assert.match(feed, /nextCursor/);
+  assert.match(card, /truncateSummary/);
 });

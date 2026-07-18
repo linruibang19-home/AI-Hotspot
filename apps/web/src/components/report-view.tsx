@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { PublicReportResponse, ReportPeriod } from "@/lib/public-report";
 
 const periods: Array<[ReportPeriod, string]> = [["DAILY", "日报"], ["WEEKLY", "周报"], ["MONTHLY", "月报"]];
+const REPORT_SECTION_LIMIT = 6;
 
 export function ReportView({ data }: { data: PublicReportResponse }) {
   const { report, archive } = data;
@@ -53,9 +54,9 @@ export function ReportView({ data }: { data: PublicReportResponse }) {
             <header>
               <span>{String(sectionIndex + 1).padStart(2, "0")}</span>
               <h2>{section.label}</h2>
-              <small>{section.items.length} 篇展示</small>
+              <small>{Math.min(section.items.length, REPORT_SECTION_LIMIT)} 篇展示</small>
             </header>
-            {section.items.map((item) => (
+            {section.items.slice(0, REPORT_SECTION_LIMIT).map((item) => (
               <article className="report-story" key={item.id}>
                 <Link href={`/content/${item.id}`}><h3>{item.title}</h3></Link>
                 <div className="report-story-meta">
@@ -63,7 +64,7 @@ export function ReportView({ data }: { data: PublicReportResponse }) {
                   <span>{item.sourceName}</span>
                   {item.finalScore === null ? null : <span>评分 {item.finalScore}</span>}
                 </div>
-                {item.summary ? <p>{item.summary}</p> : null}
+                {item.summary ? <p>{truncateSummary(item.summary)}</p> : null}
               </article>
             ))}
           </section>
@@ -139,4 +140,9 @@ function archiveLabel(period: ReportPeriod, value: string) {
 function dateParts(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   return { year, month, day };
+}
+
+function truncateSummary(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > 420 ? `${normalized.slice(0, 420)}…` : normalized;
 }

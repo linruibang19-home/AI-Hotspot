@@ -603,6 +603,10 @@ a {
   text-align: center;
 }
 
+.load-more { display: flex; justify-content: center; padding: 18px 0 4px; }
+.load-more .button { min-width: 168px; }
+.load-more-error { margin: 14px 0 0; color: var(--danger); font-size: 11px; text-align: center; }
+
 .empty-state h2 {
   margin: 0 0 8px;
 }
@@ -1358,8 +1362,8 @@ a {
   }
 
   .main-shell {
-    width: calc(100vw - var(--sidebar));
-    max-width: calc(100vw - var(--sidebar));
+    width: auto;
+    max-width: none;
   }
 
   .page-header {

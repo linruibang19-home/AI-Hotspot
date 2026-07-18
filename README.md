@@ -12,7 +12,10 @@ packages/contracts OpenAPI 与异步事件契约
 infra           Nginx 等基础设施配置
 scripts         Docker Compose 辅助脚本
 AI Hotspot 项目方案  中文产品与技术方案
+archive         已停用早期资料归档（不作为现行需求）
 ```
+
+完整职责、生成目录和归档规则见 [项目目录说明](./项目目录说明.md)。
 
 ## 本地要求
 
