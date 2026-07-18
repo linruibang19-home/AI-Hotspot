@@ -28,12 +28,21 @@ export function Sidebar() {
     setTheme(next);
   }
 
-  const canSee = (access?: "authenticated" | "operator" | "admin") => {
-    if (!access) return true;
-    if (access === "authenticated") return Boolean(user);
-    if (access === "operator") return isOperator;
-    return isAdmin;
+  const navigationHref = (href: string, access?: "authenticated" | "operator" | "admin") => {
+    if (!access) return href;
+    if (!user) return `/login?returnTo=${encodeURIComponent(href)}`;
+    if (access === "authenticated") return href;
+    if (access === "operator" && isOperator) return href;
+    if (access === "admin" && isAdmin) return href;
+    return href;
   };
+
+  const prototypeNavigation = navigation
+    .filter((group) => group.label !== "更多")
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.href !== "/admin/users"),
+    }));
 
   return (
     <aside className="sidebar" aria-label="主导航">
@@ -43,16 +52,13 @@ export function Sidebar() {
         <span className="brand-accent">HOTSPOT</span>
       </Link>
       <nav className="sidebar-nav">
-        {navigation.map((group) => {
-          const items = group.items.filter((item) => canSee(item.access));
-          if (items.length === 0) return null;
-          return (
+        {prototypeNavigation.map((group) => (
           <section className="nav-group" key={group.label}>
             <div className="nav-label">{group.label}</div>
-            {items.map((item) => (
+            {group.items.map((item) => (
               <Link
                 className={`nav-link ${isActive(pathname, item.href) ? "active" : ""}`}
-                href={item.href}
+                href={navigationHref(item.href, item.access)}
                 key={item.href}
                 aria-current={isActive(pathname, item.href) ? "page" : undefined}
                 title={item.label}
@@ -62,12 +68,11 @@ export function Sidebar() {
               </Link>
             ))}
           </section>
-        );})}
+        ))}
       </nav>
       <div className="sidebar-footer">
         <button className="theme-toggle" type="button" onClick={toggleTheme} aria-label={theme === "light" ? "切换深色模式" : "切换浅色模式"}>
-          <Icon name="moon" />
-          <Icon name="desktop" />
+          <span className={theme === "dark" ? "active" : ""}><Icon name="moon" /></span>
           <span className={theme === "light" ? "active" : ""}><Icon name="sun" /></span>
         </button>
         {loading ? <span>正在检查会话…</span> : user ? (
@@ -77,7 +82,7 @@ export function Sidebar() {
             <button className="sidebar-account" type="button" onClick={() => void logout()}>退出登录</button>
           </>
         ) : (
-          <Link className="sidebar-account" href="/login">内部员工登录</Link>
+          <Link className="sidebar-account" href="/login?returnTo=%2Fadmin%2Fsources">进入管理端</Link>
         )}
       </div>
     </aside>

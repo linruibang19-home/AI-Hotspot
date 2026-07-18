@@ -6,11 +6,10 @@ import { PublicContentCard } from "@/components/public-content-card";
 import { Icon } from "@/components/icons";
 import type { PublicContent } from "@/lib/public-content";
 
-type FeaturedFilter = "ALL" | "MODEL" | "PRODUCT" | "INDUSTRY" | "PAPER" | "PRACTICE";
 type SourceFilter = "ALL" | "OFFICIAL" | "MEDIA" | "RESEARCH" | "COMMUNITY";
 
-const featuredFilters: Array<[FeaturedFilter, string]> = [
-  ["ALL", "全部"], ["MODEL", "模型"], ["PRODUCT", "产品"], ["INDUSTRY", "行业"], ["PAPER", "论文"], ["PRACTICE", "技巧"],
+const featuredFilters: Array<[SourceFilter, string]> = [
+  ["ALL", "全部"], ["OFFICIAL", "官方"], ["RESEARCH", "论文"], ["COMMUNITY", "社区"], ["MEDIA", "媒体"],
 ];
 
 const sourceFilters: Array<[SourceFilter, string]> = [
@@ -26,7 +25,7 @@ export function PublicFeed({
   featured?: boolean;
   initialQuery?: string;
 }) {
-  const [featuredFilter, setFeaturedFilter] = useState<FeaturedFilter>("ALL");
+  const [featuredFilter, setFeaturedFilter] = useState<SourceFilter>("ALL");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("ALL");
   const [contentType, setContentType] = useState("ALL");
   const [query, setQuery] = useState(initialQuery);
@@ -35,7 +34,7 @@ export function PublicFeed({
   const visible = useMemo(() => items.filter((item) => {
     const haystack = `${item.title} ${item.originalTitle} ${item.summary ?? ""} ${item.sourceName}`.toLocaleLowerCase("zh-CN");
     if (deferredQuery && !haystack.includes(deferredQuery)) return false;
-    if (featured) return matchesFeatured(item, featuredFilter);
+    if (featured) return matchesSource(item, featuredFilter);
     if (!matchesSource(item, sourceFilter)) return false;
     return contentType === "ALL" || item.contentType === contentType;
   }), [contentType, deferredQuery, featured, featuredFilter, items, sourceFilter]);
@@ -48,7 +47,7 @@ export function PublicFeed({
       {featured ? (
         <div className="toolbar featured-toolbar">
           <FilterTabs items={featuredFilters} value={featuredFilter} onChange={setFeaturedFilter} label="精选分类" />
-          <SearchBox value={query} onChange={setQuery} placeholder="搜索标题/摘要/正文..." />
+          <SearchBox value={query} onChange={setQuery} placeholder="搜索标题 / 摘要 / 正文..." />
         </div>
       ) : (
         <div className="all-filterbar">
@@ -92,17 +91,7 @@ function SearchBox({ value, onChange, placeholder, withButton = false }: { value
 }
 
 function HotList({ items }: { items: PublicContent[] }) {
-  return <section className="panel hot-panel" aria-labelledby="hot-title"><div className="panel-title" id="hot-title">当前热点</div>{items.map((item, index) => <Link className="hot-row" href={`/content/${item.id}`} key={item.id}><span className="hot-rank">{index + 1}</span><strong>{item.title}</strong><small>查看关联内容</small></Link>)}</section>;
-}
-
-function matchesFeatured(item: PublicContent, filter: FeaturedFilter) {
-  if (filter === "ALL") return true;
-  const text = `${item.title} ${item.originalTitle} ${item.summary ?? ""}`.toLowerCase();
-  if (filter === "MODEL") return /模型|model|llm|gpt|claude|gemini|qwen|kimi|llama/.test(text);
-  if (filter === "PRODUCT") return /产品|发布|更新|app|agent|copilot|平台/.test(text);
-  if (filter === "INDUSTRY") return /行业|融资|公司|市场|监管|政策|合作/.test(text);
-  if (filter === "PAPER") return item.contentType === "RESEARCH" || item.sourceType === "RESEARCH" || /论文|研究|paper|benchmark/.test(text);
-  return /教程|实践|技巧|指南|tutorial|how to/.test(text);
+  return <section className="panel hot-panel" aria-labelledby="hot-title"><div className="panel-title" id="hot-title"><span>当前热点</span><small>基于公开内容评分与时效排序</small></div>{items.map((item, index) => <Link className="hot-row" href={`/content/${item.id}`} key={item.id}><span className="hot-rank">{index + 1}</span><strong>{item.title}</strong><small>查看事件</small></Link>)}</section>;
 }
 
 function matchesSource(item: PublicContent, filter: SourceFilter) {

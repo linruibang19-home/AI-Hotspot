@@ -18,6 +18,7 @@ export type IconName =
   | "sun"
   | "moon"
   | "desktop"
+  | "download"
   | "arrow"
   | "external"
   | "heart"
@@ -42,6 +43,7 @@ const paths: Record<IconName, React.ReactNode> = {
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
   moon: <path d="M21 12.8A8.8 8.8 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" />,
   desktop: <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></>,
+  download: <><path d="M12 3v12M7 10l5 5 5-5" /><path d="M4 20h16" /></>,
   arrow: <><path d="M5 12h14M14 7l5 5-5 5" /></>,
   external: <><path d="M14 3h7v7M10 14 21 3" /><path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h6" /></>,
   heart: <path d="M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6L12 21l8.8-8.8a5.4 5.4 0 0 0 0-7.6Z" />,

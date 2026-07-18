@@ -93,3 +93,23 @@ test("M5 content governance uses real queues, events and ticket APIs", () => {
   assert.match(page, /DEBUNK/);
   assert.doesNotMatch(page, /WorkspacePage/);
 });
+
+test("approved prototype navigation stays discoverable without weakening route permissions", () => {
+  const sidebar = readFileSync("src/components/sidebar.tsx", "utf8");
+  const navigation = readFileSync("src/lib/navigation.ts", "utf8");
+  assert.match(navigation, /label: "智能"/);
+  assert.match(navigation, /label: "管理"/);
+  assert.match(sidebar, /returnTo=/);
+  assert.doesNotMatch(sidebar, /items\.filter\(\(item\) => canSee/);
+});
+
+test("featured view uses the approved source taxonomy and real public content", () => {
+  const page = readFileSync("src/app/page.tsx", "utf8");
+  const feed = readFileSync("src/components/public-feed.tsx", "utf8");
+  assert.match(page, /导出日报/);
+  assert.match(page, /进入知识库/);
+  assert.match(feed, /\["OFFICIAL", "官方"\]/);
+  assert.match(feed, /\["RESEARCH", "论文"\]/);
+  assert.match(feed, /\["COMMUNITY", "社区"\]/);
+  assert.doesNotMatch(feed, /个独立信源/);
+});
