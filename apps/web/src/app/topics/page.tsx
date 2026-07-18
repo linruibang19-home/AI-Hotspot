@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { getPublicTopics, type PublicTopic } from "@/lib/public-discovery";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +17,6 @@ export default async function TopicsPage() {
 
 function TopicGroup({ title, description, topics }: { code: string; title: string; description: string; topics: PublicTopic[] }) {
   return <section className="topic-section"><header><h2>{title}</h2><p>{description}</p></header><div className="topic-grid">{topics.map((topic) =>
-    <Link className="topic-card" href={`/topics/${topic.slug}`} key={topic.id}><h3>{topic.name}</h3><p>{topic.description}</p><span>查看 {topic.contentCount} 条内容 · {topic.featuredCount} 条精选 <b aria-hidden="true">→</b></span></Link>
+    <a className="topic-card" href={`/topics/${topic.slug}`} key={topic.id}><h3>{topic.name}</h3><p>{topic.description}</p><span>查看 {topic.contentCount} 条内容 · {topic.featuredCount} 条精选 <b aria-hidden="true">→</b></span></a>
   )}</div></section>;
 }

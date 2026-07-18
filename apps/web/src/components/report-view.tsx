@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { PublicReportResponse, ReportPeriod } from "@/lib/public-report";
 
 const periods: Array<[ReportPeriod, string]> = [["DAILY", "日报"], ["WEEKLY", "周报"], ["MONTHLY", "月报"]];
@@ -14,18 +13,18 @@ export function ReportView({ data }: { data: PublicReportResponse }) {
       <aside className="report-archive" aria-label="报告归档">
         <nav className="report-period-tabs" aria-label="报告周期">
           {periods.map(([period, label]) => (
-            <Link
+            <a
               className={report.period === period ? "active" : ""}
               href={`/reports?period=${period}`}
               key={period}
               aria-current={report.period === period ? "page" : undefined}
-            >{label}</Link>
+            >{label}</a>
           ))}
         </nav>
         <div className="report-archive-list">
           <h2>{archiveTitle(report.period, report.startDate)} <span>{archive.length}</span></h2>
           {archive.map((item) => (
-            <Link
+            <a
               className={item.anchorDate === report.startDate ? "active" : ""}
               href={`/reports?period=${report.period}&anchor=${item.anchorDate}`}
               key={item.anchorDate}
@@ -33,7 +32,7 @@ export function ReportView({ data }: { data: PublicReportResponse }) {
               <strong>{archiveLabel(report.period, item.anchorDate)}</strong>
               <span>{item.leadTitle ?? "本期公开内容"}</span>
               <small>{item.storyCount} 条</small>
-            </Link>
+            </a>
           ))}
         </div>
       </aside>
@@ -58,7 +57,7 @@ export function ReportView({ data }: { data: PublicReportResponse }) {
             </header>
             {section.items.slice(0, REPORT_SECTION_LIMIT).map((item) => (
               <article className="report-story" key={item.id}>
-                <Link href={`/content/${item.id}`}><h3>{item.title}</h3></Link>
+                <a href={`/content/${item.id}`}><h3>{item.title}</h3></a>
                 <div className="report-story-meta">
                   <b>{item.sourceOfficialLevel === "THIRD_PARTY" ? "公开来源" : "官方/一手"}</b>
                   <span>{item.sourceName}</span>
