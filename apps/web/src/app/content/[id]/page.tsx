@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { getPublicContent } from "@/lib/public-content";
+import { FavoriteButton } from "@/components/favorite-button";
+import { Icon } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 
@@ -23,10 +25,11 @@ export default async function ContentDetailPage({ params }: { params: Promise<{ 
         <div className="content-meta">
           <span className="source-avatar">{item.sourceName.slice(0, 2).toUpperCase()}</span>
           <strong>{item.sourceName}</strong>
-          <span>· {item.sourceType}</span>
+          <span>· {sourceTypeLabel(item.sourceType)}</span>
           <span className="badge official-badge">{item.sourceOfficialLevel === "OFFICIAL" ? "官方" : item.sourceOfficialLevel === "FIRST_PARTY" ? "一手" : "第三方"}</span>
           {item.featured ? <span className="badge">✦ 精选</span> : null}
           {item.finalScore !== null ? <span className="score">● {Math.round(item.finalScore)}</span> : null}
+          <FavoriteButton id={item.id} />
         </div>
         <h1>{item.title}</h1>
         {item.title !== item.originalTitle ? <p className="original-title">原文标题：{item.originalTitle}</p> : null}
@@ -34,12 +37,20 @@ export default async function ContentDetailPage({ params }: { params: Promise<{ 
         {item.recommendationReason ? <div className="reason detail-reason"><strong>推荐理由：</strong>{item.recommendationReason}</div> : null}
         <dl className="content-facts">
           <div><dt>原文时间</dt><dd>{sourceTime}</dd></div>
-          <div><dt>内容类型</dt><dd>{item.contentType}</dd></div>
+          <div><dt>内容类型</dt><dd>{contentTypeLabel(item.contentType)}</dd></div>
           <div><dt>事实状态</dt><dd>{item.factStatus === "CONFIRMED" ? "已确认" : "未证实"}</dd></div>
           <div><dt>公开状态</dt><dd>PUBLISHED · PUBLIC</dd></div>
         </dl>
-        {item.originalUrl ? <a className="button primary original-link" href={item.originalUrl} target="_blank" rel="noreferrer">阅读原文 ↗</a> : null}
+        {item.originalUrl ? <a className="button primary original-link" href={item.originalUrl} target="_blank" rel="noreferrer">阅读原文 <Icon name="external" /></a> : null}
       </article>
     </div>
   );
+}
+
+function sourceTypeLabel(value: string) {
+  return ({ COMPANY: "官网", RESEARCH: "研究", MEDIA: "媒体", COMMUNITY: "社区", PAPER: "论文", GITHUB: "GitHub" } as Record<string, string>)[value] ?? value;
+}
+
+function contentTypeLabel(value: string) {
+  return ({ ARTICLE: "资讯", RESEARCH: "论文/研究", RELEASE: "模型发布", PRODUCT: "产品更新", TUTORIAL: "教程实践", OPINION: "观点" } as Record<string, string>)[value] ?? value;
 }

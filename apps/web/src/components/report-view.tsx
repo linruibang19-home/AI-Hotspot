@@ -49,7 +49,7 @@ export function ReportView({ data }: { data: PublicReportResponse }) {
         {report.sections.length === 0 ? (
           <section className="panel empty-state"><h2>{report.headline}</h2><p>{report.lead}</p></section>
         ) : report.sections.map((section, sectionIndex) => (
-          <section className="report-section" key={section.code}>
+          <section className="report-section" id={`report-${section.code}`} key={section.code}>
             <header>
               <span>{String(sectionIndex + 1).padStart(2, "0")}</span>
               <h2>{section.label}</h2>

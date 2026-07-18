@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { topicGroups } from "@/lib/topics";
+import { getPublicContents } from "@/lib/public-content";
 
-export default function TopicsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function TopicsPage() {
   const topicCount = topicGroups.reduce((total, group) => total + group.topics.length, 0);
+  const contents = (await getPublicContents(false)).items;
   return (
     <div className="topics-page page-shell">
       <header className="topics-hero panel">
@@ -18,7 +22,7 @@ export default function TopicsPage() {
               <Link className="topic-card" href={`/all?query=${encodeURIComponent(topic.query)}`} key={topic.name}>
                 <h3>{topic.name}</h3>
                 <p>{topic.description}</p>
-                <span>查看真实内容 <b aria-hidden="true">→</b></span>
+                <span>查看 {countMatches(contents, topic.query)} 条近期内容 <b aria-hidden="true">→</b></span>
               </Link>
             ))}
           </div>
@@ -26,4 +30,12 @@ export default function TopicsPage() {
       ))}
     </div>
   );
+}
+
+function countMatches(items: Array<{ title: string; summary: string | null; sourceName: string }>, query: string) {
+  const terms = query.toLocaleLowerCase("zh-CN").split(/\s+/).filter(Boolean);
+  return items.filter((item) => {
+    const text = `${item.title} ${item.summary ?? ""} ${item.sourceName}`.toLocaleLowerCase("zh-CN");
+    return terms.some((term) => text.includes(term));
+  }).length;
 }

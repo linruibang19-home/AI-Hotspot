@@ -1,6 +1,6 @@
 # AI Hotspot
 
-AI Hotspot 是面向 AI 从业者的公开情报、研究、订阅与自动化产品。当前仓库已经完成 M0～M4：方案与正式原型、工程基础设施、身份权限与信源管理、RSS/Atom 垂直闭环，以及公开 Connector 与首批正式信源目录。下一阶段为 M5 内容质量、事件关联与审核治理。
+AI Hotspot 是面向 AI 从业者的公开情报、研究、订阅与自动化产品。当前仓库已经完成 M0～M5：方案与正式原型、工程基础设施、身份权限与信源管理、RSS/Atom 垂直闭环、公开 Connector 与正式信源目录，以及内容质量、事件关联和审核治理。正式 Web 界面已按冻结原型完成一轮高保真实现；下一阶段为 M6 完整资讯产品与报告业务闭环。
 
 ## 工程结构
 
@@ -83,6 +83,12 @@ Compose 已启动时，可执行 M1 端到端 Smoke：
 ./scripts/Test-M4-Smoke.ps1
 ```
 
+执行 M5 内容加工、评分、去重、事件、审核、纠错和下架恢复 Smoke：
+
+```powershell
+./scripts/Test-M5-Smoke.ps1
+```
+
 本地引导管理员默认使用 `.env` 中的 `BOOTSTRAP_ADMIN_EMAIL` 和 `BOOTSTRAP_ADMIN_PASSWORD`。首次启动后应立即修改生产环境凭据；邀请码明文只在创建响应中返回一次。
 
 单独执行：
@@ -109,6 +115,6 @@ docker compose --env-file .env.example config --quiet
 - 不开放公众自由注册；
 - 不支持用户自带模型密钥；
 - 不使用 Kubernetes、Kafka 或 Elasticsearch；
-- M4 已实现 RSS/Atom、Website、Sitemap、GitHub、arXiv、Hacker News 等公开 Connector，首批 19 个正式 Endpoint 中 17 个已真实运行、2 个因上游可用性暂停；内容质量与事件、RAG、邮件订阅和 Agent 仍按 M5～M9 逐步实现。
+- M4 已实现 RSS/Atom、Website、Sitemap、GitHub、arXiv、Hacker News 等公开 Connector，首批 19 个正式 Endpoint 中 17 个已真实运行、2 个因上游可用性暂停；M5 已实现内容质量与事件治理；报告编辑发布、RAG、邮件投递和 Agent 后端仍按 M6～M9 逐步实现。
 
 详细进度见 [项目进度与剩余任务](./AI%20Hotspot%20项目方案/00%20项目总览/项目进度与剩余任务.md)。

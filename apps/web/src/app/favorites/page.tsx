@@ -1,5 +1,10 @@
-import { WorkspacePage } from "@/components/workspace-page";
+import { PageHeader } from "@/components/page-header";
+import { FavoritesView } from "@/components/favorites-view";
+import { getPublicContents } from "@/lib/public-content";
 
-export default function FavoritesPage() {
-  return <WorkspacePage title="收藏" description="登录后跨设备保存内容与事件。" actionLabel="邀请登录" metrics={[["2", "内容收藏"], ["1", "事件收藏"], ["0", "待整理"], ["3", "全部收藏"]]} cards={[{ title: "内容收藏", description: "稍后阅读的公开资讯和论文。" }, { title: "事件收藏", description: "持续追踪同一事件的后续证据。" }, { title: "权限状态", description: "M2 接入邀请登录后启用真实写入。", status: "等待 M2" }]} />;
+export const dynamic = "force-dynamic";
+
+export default async function FavoritesPage() {
+  const page = await getPublicContents(false);
+  return <div className="page-shell favorites-page"><PageHeader title="收藏" description="保存稍后阅读的资讯、论文和研究线索。" /><div className="favorites-notice">收藏保存在当前浏览器；登录后将支持跨设备同步。</div><FavoritesView items={page.items} /></div>;
 }
