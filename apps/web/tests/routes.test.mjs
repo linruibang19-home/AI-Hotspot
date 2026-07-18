@@ -11,6 +11,8 @@ const expectedPages = [
   "src/app/weekly/page.tsx",
   "src/app/monthly/page.tsx",
   "src/app/topics/page.tsx",
+  "src/app/topics/[slug]/page.tsx",
+  "src/app/events/[id]/page.tsx",
   "src/app/favorites/page.tsx",
   "src/app/subscriptions/page.tsx",
   "src/app/research/page.tsx",
@@ -19,6 +21,7 @@ const expectedPages = [
   "src/app/admin/crawls/page.tsx",
   "src/app/admin/content/page.tsx",
   "src/app/admin/models/page.tsx",
+  "src/app/admin/reports/page.tsx",
   "src/app/admin/users/page.tsx",
   "src/app/admin/sources/[id]/page.tsx",
   "src/app/login/page.tsx",
@@ -86,14 +89,14 @@ test("public email-code registration and login are discoverable", () => {
   assert.match(register, /\/auth\/register/);
 });
 
-test("topic cards navigate to real public-content filters", () => {
+test("M6 topics use persistent topic and public discovery APIs", () => {
   const page = readFileSync("src/app/topics/page.tsx", "utf8");
-  const topics = readFileSync("src/lib/topics.ts", "utf8");
-  const all = readFileSync("src/app/all/page.tsx", "utf8");
-  assert.match(page, /\/all\?query=/);
-  assert.match(topics, /Google \/ Gemini/);
-  assert.match(topics, /通义千问 Qwen/);
-  assert.match(all, /initialQuery/);
+  const detail = readFileSync("src/app/topics/[slug]/page.tsx", "utf8");
+  const discovery = readFileSync("src/lib/public-discovery.ts", "utf8");
+  assert.match(page, /getPublicTopics/);
+  assert.match(page, /\/topics\/\$\{topic\.slug\}/);
+  assert.match(detail, /getPublicTopic/);
+  assert.match(discovery, /\/api\/v1\/public/);
 });
 
 test("M5 content governance uses real queues, events and ticket APIs", () => {
@@ -144,14 +147,30 @@ test("featured view uses the approved source taxonomy and real public content", 
   assert.match(feed, /\["OFFICIAL", "官方"\]/);
   assert.match(feed, /\["RESEARCH", "论文"\]/);
   assert.match(feed, /\["COMMUNITY", "社区"\]/);
-  assert.doesNotMatch(feed, /个独立信源/);
+  assert.match(page, /getPublicEvents/);
+  assert.match(feed, /个独立信源/);
+});
+
+test("M6 search, server favorites and report editorial are real API flows", () => {
+  const all = readFileSync("src/app/all/page.tsx", "utf8");
+  const searchApi = readFileSync("src/lib/public-content.ts", "utf8");
+  const favorite = readFileSync("src/components/favorite-button.tsx", "utf8");
+  const favorites = readFileSync("src/components/favorites-view.tsx", "utf8");
+  const editor = readFileSync("src/app/admin/reports/page.tsx", "utf8");
+  assert.match(all, /searchPublicContents/);
+  assert.match(searchApi, /\/api\/v1\/public\/search/);
+  assert.match(favorite, /\/favorites\/CONTENT/);
+  assert.doesNotMatch(favorite, /localStorage/);
+  assert.match(favorites, /apiFetch/);
+  assert.match(editor, /\/admin\/reports\/generate/);
+  assert.match(editor, /\/publish/);
 });
 
 test("public feeds use cursor pagination instead of hydrating fifty cards", () => {
   const api = readFileSync("src/lib/public-content.ts", "utf8");
   const feed = readFileSync("src/components/public-feed.tsx", "utf8");
   const card = readFileSync("src/components/public-content-card.tsx", "utf8");
-  assert.doesNotMatch(api, /limit=50/);
+  assert.match(api, /const limit = featured \? 12 : 20/);
   assert.match(feed, /加载更多内容/);
   assert.match(feed, /nextCursor/);
   assert.match(card, /truncateSummary/);

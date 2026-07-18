@@ -42,7 +42,7 @@ export function ReportView({ data }: { data: PublicReportResponse }) {
         <header className="report-masthead">
           <span>{report.volume} · {report.storyCount} STORIES · AI HOTSPOT {report.period}</span>
           <h1>AI HOTSPOT {report.periodLabel}</h1>
-          <p>{dateLabel} · {report.period} · 规则化实时聚合</p>
+          <p>{dateLabel} · {report.period} · 编辑系统自动综合</p>
         </header>
 
         {report.period === "DAILY" ? <DailyLead data={data} /> : <LongPeriodLead data={data} />}
@@ -100,7 +100,7 @@ function LongPeriodLead({ data }: { data: PublicReportResponse }) {
         <p>{report.lead}</p>
       </section>
       <section className="report-metrics" aria-label="报告统计">
-        <div><strong>{report.storyCount}</strong><span>收录内容</span></div>
+        <div><strong>{report.eventCount}</strong><span>独立事件</span></div>
         <div><strong>{report.sourceCount}</strong><span>独立信源</span></div>
         <div><strong>{report.officialSourceCount}</strong><span>官方/一手信源</span></div>
         <div><strong>≈{report.estimatedMinutes} min</strong><span>读完本页</span></div>

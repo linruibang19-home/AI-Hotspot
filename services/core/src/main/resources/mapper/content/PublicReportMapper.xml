@@ -26,11 +26,13 @@
     </select>
 
     <select id="metricsBetween" resultType="com.aihotspot.core.content.PublicReportMapper$ReportMetrics">
-        select count(*) as story_count,
+        select count(distinct c.id) as story_count,
+               count(distinct cer.event_cluster_id) as event_count,
                count(distinct c.source_entity_id) as source_count,
                count(distinct c.source_entity_id) filter (where c.source_official_level in ('OFFICIAL', 'FIRST_PARTY')) as official_source_count,
-               count(*) filter (where c.featured) as featured_count
+               count(distinct c.id) filter (where c.featured) as featured_count
         from content.content_item c
+        left join content.content_event_relation cer on cer.content_item_id = c.id
         where <include refid="publicPredicate"/>
           and c.published_at &gt;= #{startAt}
           and c.published_at &lt; #{endAt}
@@ -60,5 +62,35 @@
         select max((c.published_at at time zone 'Asia/Shanghai')::date)
         from content.content_item c
         where <include refid="publicPredicate"/>
+    </select>
+
+    <select id="findPublishedIssue" resultType="com.aihotspot.core.content.PublicReportMapper$PersistedIssue">
+        select id, period, volume, start_date, end_date, headline, lead, story_count, event_count,
+               source_count, official_source_count, featured_count, estimated_minutes
+        from content.report_issue
+        where period = #{period} and status = 'PUBLISHED'
+        <choose><when test="anchor != null">and start_date &lt;= #{anchor} and end_date &gt;= #{anchor}</when></choose>
+        order by start_date desc, id desc limit 1
+    </select>
+    <select id="publishedArchive" resultType="com.aihotspot.core.content.PublicReportMapper$ArchiveBucket">
+        select start_date as anchor_date, story_count, headline as lead_title
+        from content.report_issue where period = #{period} and status = 'PUBLISHED'
+        order by start_date desc, id desc limit #{limit}
+    </select>
+    <select id="publishedSections" resultType="com.aihotspot.core.content.PublicReportMapper$PersistedSection">
+        select id, section_code, title, summary, sort_order from content.report_section
+        where report_issue_id = #{issueId} order by sort_order, id
+    </select>
+    <select id="publishedSectionItems" resultType="com.aihotspot.core.content.PublicContentMapper$PublicContentView">
+        select c.id, s.name as source_name, c.source_type, c.source_official_level,
+               c.content_type, coalesce(c.title_zh, c.original_title) as title,
+               c.original_title, c.summary_zh as summary, c.recommendation_reason,
+               c.original_url, c.canonical_url, c.fact_status, c.final_score, c.featured,
+               c.source_published_at, c.published_at
+        from content.report_item ri
+        join content.content_item c on c.id = ri.content_item_id
+        join source.source_entity s on s.id = c.source_entity_id
+        where ri.report_section_id = #{sectionId} and <include refid="publicPredicate"/>
+        order by ri.position, ri.id
     </select>
 </mapper>

@@ -3,11 +3,12 @@ import { PageHeader } from "@/components/page-header";
 import { PublicFeed } from "@/components/public-feed";
 import { Icon } from "@/components/icons";
 import { getPublicContents } from "@/lib/public-content";
+import { getPublicEvents } from "@/lib/public-discovery";
 
 export const dynamic = "force-dynamic";
 
 export default async function FeaturedPage() {
-  const page = await getPublicContents(true);
+  const [page, events] = await Promise.all([getPublicContents(true), getPublicEvents(3)]);
   const today = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long", timeZone: "Asia/Shanghai" }).format(new Date());
   return (
     <div className="page-shell">
@@ -16,7 +17,7 @@ export default async function FeaturedPage() {
         description={`${today} · AI 自动挑选的高价值公开内容`}
         action={<div className="header-actions"><Link className="button" href="/reports?period=DAILY"><Icon name="download" />导出日报</Link><Link className="button primary" href="/research">进入知识库</Link></div>}
       />
-      <PublicFeed items={page.items} nextCursor={page.nextCursor} hasMore={page.hasMore} featured />
+      <PublicFeed items={page.items} nextCursor={page.nextCursor} hasMore={page.hasMore} featured hotEvents={events} />
     </div>
   );
 }

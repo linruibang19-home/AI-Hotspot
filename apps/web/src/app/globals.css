@@ -1552,6 +1552,41 @@ a {
   .score-strip span:last-child { grid-column: 1 / -1; }
 }
 
+.search-icon-button { display: grid; width: 38px; height: 38px; flex: 0 0 38px; padding: 0; place-items: center; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.search-icon-button svg { margin: 0; }
+.topic-detail-summary, .event-metrics { display: grid; grid-template-columns: repeat(2, 160px) minmax(0, 1fr); gap: 0; margin: 18px 0; overflow: hidden; }
+.topic-detail-summary > div, .event-metrics > div { display: grid; min-height: 98px; place-items: center; align-content: center; border-right: 1px solid var(--border); }
+.topic-detail-summary strong, .event-metrics strong { font-size: 24px; font-weight: 850; }
+.topic-detail-summary span, .event-metrics span { color: var(--muted); font-size: 10px; }
+.topic-detail-summary > p { display: flex; margin: 0; padding: 20px; align-items: center; color: var(--muted); line-height: 1.8; }
+.event-detail-page { max-width: 1160px; padding-top: 38px; }
+.detail-back { color: var(--accent); font-size: 12px; font-weight: 700; }
+.event-detail-header { padding: 44px 0 26px; }
+.event-detail-header > div { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+.event-detail-header h1 { max-width: 920px; margin: 18px 0 14px; font-size: clamp(30px, 4vw, 48px); font-weight: 850; letter-spacing: -.035em; line-height: 1.2; }
+.event-detail-header > p { max-width: 860px; color: #52656d; font-size: 15px; line-height: 1.9; }
+.event-metrics { grid-template-columns: repeat(3, 1fr); }
+.event-section-title { margin: 36px 0 16px; font-size: 20px; font-weight: 820; }
+.editor-period { min-height: 38px; padding: 0 34px 0 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); }
+.report-editor-layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; }
+.report-editor-list, .report-editor-form { min-height: 560px; padding: 20px; }
+.report-editor-list h2 { margin: 0 0 16px; font-size: 17px; }
+.report-editor-list button { display: grid; width: 100%; gap: 6px; margin-bottom: 9px; padding: 14px; border: 1px solid var(--border); border-radius: 9px; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
+.report-editor-list button.active { border-color: var(--accent); background: var(--accent-soft); }
+.report-editor-list button span { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.report-editor-list button small { color: var(--accent); }
+.report-editor-form > header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.report-editor-form h2 { margin: 9px 0 0; }
+.report-editor-form > label { display: grid; gap: 8px; margin-bottom: 18px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.report-editor-form input, .report-editor-form textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); outline: 0; }
+.report-editor-form textarea { min-height: 190px; resize: vertical; line-height: 1.75; }
+.report-editor-form input:focus, .report-editor-form textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent); }
+.report-editor-metrics { display: flex; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 11px; }
+.report-editor-metrics span { padding: 7px 9px; border-radius: 6px; background: var(--surface-muted); }
+.report-editor-form footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+@media (max-width: 900px) { .report-editor-layout { grid-template-columns: 1fr; } .report-editor-list, .report-editor-form { min-height: auto; } }
+@media (max-width: 760px) { .topic-detail-summary { grid-template-columns: 1fr 1fr; } .topic-detail-summary > p { grid-column: 1 / -1; } .event-detail-header h1 { font-size: 30px; } }
+
 .editorial-page { max-width: 1180px; padding-bottom: 80px; }
 .editorial-hero { margin-top: 24px; padding: 54px; }
 .editorial-hero h2 { margin: 16px 0; font-size: clamp(30px, 5vw, 54px); letter-spacing: -.04em; }

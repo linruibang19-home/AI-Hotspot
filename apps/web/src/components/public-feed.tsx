@@ -1,10 +1,12 @@
 "use client";
 
-import { useDeferredValue, useMemo, useState } from "react";
+import { FormEvent, useDeferredValue, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PublicContentCard } from "@/components/public-content-card";
 import { Icon } from "@/components/icons";
 import type { PublicContent, PublicContentPage } from "@/lib/public-content";
+import type { PublicEvent } from "@/lib/public-discovery";
 
 type SourceFilter = "ALL" | "OFFICIAL" | "MEDIA" | "RESEARCH" | "COMMUNITY";
 
@@ -22,13 +24,16 @@ export function PublicFeed({
   hasMore: initialHasMore = false,
   featured = false,
   initialQuery = "",
+  hotEvents = [],
 }: {
   items: PublicContent[];
   nextCursor?: string | null;
   hasMore?: boolean;
   featured?: boolean;
   initialQuery?: string;
+  hotEvents?: PublicEvent[];
 }) {
+  const router = useRouter();
   const [loadedItems, setLoadedItems] = useState(items);
   const [nextCursor, setNextCursor] = useState(initialNextCursor);
   const [hasMore, setHasMore] = useState(initialHasMore);
@@ -39,6 +44,12 @@ export function PublicFeed({
   const [contentType, setContentType] = useState("ALL");
   const [query, setQuery] = useState(initialQuery);
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("zh-CN"));
+
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalized = query.trim();
+    router.push(normalized ? `/all?query=${encodeURIComponent(normalized)}` : "/all");
+  }
 
   const visible = useMemo(() => loadedItems.filter((item) => {
     const haystack = `${item.title} ${item.originalTitle} ${item.summary ?? ""} ${item.sourceName}`.toLocaleLowerCase("zh-CN");
@@ -78,7 +89,7 @@ export function PublicFeed({
       {featured ? (
         <div className="toolbar featured-toolbar">
           <FilterTabs items={featuredFilters} value={featuredFilter} onChange={setFeaturedFilter} label="精选分类" />
-          <SearchBox value={query} onChange={setQuery} placeholder="搜索标题 / 摘要 / 正文..." />
+          <SearchBox value={query} onChange={setQuery} onSubmit={submitSearch} placeholder="搜索标题 / 摘要 / 正文..." />
         </div>
       ) : (
         <div className="all-filterbar">
@@ -88,11 +99,11 @@ export function PublicFeed({
             <option value="ALL">全部</option>
             {types.map((type) => <option value={type} key={type}>{contentTypeLabel(type)}</option>)}
           </select></label>
-          <SearchBox value={query} onChange={setQuery} placeholder="搜索标题/摘要/正文..." withButton />
+          <SearchBox value={query} onChange={setQuery} onSubmit={submitSearch} placeholder="搜索标题/摘要/正文..." withButton />
         </div>
       )}
 
-      {featured && visible.length > 0 ? <HotList items={visible.slice(0, 3)} /> : null}
+      {featured && hotEvents.length > 0 ? <HotList events={hotEvents} /> : null}
 
       {groups.length === 0 ? (
         <section className="panel empty-state"><h2>暂无匹配内容</h2><p>清除筛选条件，或等待下一轮公开信源更新。</p><button className="button" type="button" onClick={() => { setQuery(""); setFeaturedFilter("ALL"); setSourceFilter("ALL"); setContentType("ALL"); }}>清除筛选</button></section>
@@ -119,12 +130,12 @@ function FilterTabs<T extends string>({ items, value, onChange, label }: { items
   return <div className="tabs" aria-label={label}>{items.map(([key, text]) => <button className={`tab tab-button ${value === key ? "active" : ""}`} type="button" aria-pressed={value === key} onClick={() => onChange(key)} key={key}>{text}</button>)}</div>;
 }
 
-function SearchBox({ value, onChange, placeholder, withButton = false }: { value: string; onChange: (value: string) => void; placeholder: string; withButton?: boolean }) {
-  return <label className={`search-shell ${withButton ? "with-button" : ""}`}><input aria-label="搜索公开内容" placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} />{withButton ? <button type="button">搜索</button> : <Icon name="search" />}</label>;
+function SearchBox({ value, onChange, onSubmit, placeholder, withButton = false }: { value: string; onChange: (value: string) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; placeholder: string; withButton?: boolean }) {
+  return <form className={`search-shell ${withButton ? "with-button" : ""}`} onSubmit={onSubmit} role="search"><input aria-label="搜索公开内容" placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} />{withButton ? <button type="submit">搜索</button> : <button className="search-icon-button" type="submit" aria-label="提交搜索"><Icon name="search" /></button>}</form>;
 }
 
-function HotList({ items }: { items: PublicContent[] }) {
-  return <section className="panel hot-panel" aria-labelledby="hot-title"><div className="panel-title" id="hot-title"><span>当前热点</span><small>基于公开内容评分与时效排序</small></div>{items.map((item, index) => <Link className="hot-row" href={`/content/${item.id}`} key={item.id}><span className="hot-rank">{index + 1}</span><strong>{item.title}</strong><small>查看事件</small></Link>)}</section>;
+function HotList({ events }: { events: PublicEvent[] }) {
+  return <section className="panel hot-panel" aria-labelledby="hot-title"><div className="panel-title" id="hot-title"><span>当前热点</span><small>基于独立信源数量与时效计算</small></div>{events.map((event, index) => <Link className="hot-row" href={`/events/${event.id}`} key={event.id}><span className="hot-rank">{index + 1}</span><strong>{event.title}</strong><small>{event.sourceCount} 个独立信源</small></Link>)}</section>;
 }
 
 function matchesSource(item: PublicContent, filter: SourceFilter) {

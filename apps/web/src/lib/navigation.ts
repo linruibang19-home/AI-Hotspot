@@ -45,6 +45,7 @@ export const navigation: NavigationGroup[] = [
       { href: "/admin/sources", label: "信源管理", icon: "source", access: "operator" },
       { href: "/admin/crawls", label: "采集监控", icon: "activity", access: "operator" },
       { href: "/admin/content", label: "内容审核", icon: "review", access: "operator" },
+      { href: "/admin/reports", label: "报告编辑", icon: "report", access: "operator" },
       { href: "/admin/models", label: "模型与 Prompt", icon: "settings", access: "admin" },
       { href: "/admin/users", label: "用户与邀请", icon: "users", access: "admin" },
     ],

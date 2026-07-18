@@ -35,6 +35,14 @@ export async function getPublicContents(featured = false): Promise<PublicContent
   return response.json() as Promise<PublicContentPage>;
 }
 
+export async function searchPublicContents(query: string): Promise<PublicContent[]> {
+  const response = await fetch(`${coreApi}/api/v1/public/search?query=${encodeURIComponent(query)}&limit=50`, {
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`公开搜索服务暂时不可用（${response.status}）`);
+  return response.json() as Promise<PublicContent[]>;
+}
+
 export async function getPublicContent(id: string): Promise<PublicContent | null> {
   const response = await fetch(`${coreApi}/api/v1/public/contents/${id}`, { cache: "no-store" });
   if (response.status === 404) return null;

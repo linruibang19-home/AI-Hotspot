@@ -29,6 +29,16 @@ public class PublicReportService {
 
     public ReportResponse get(String requestedPeriod, LocalDate requestedAnchor) {
         Period period = parsePeriod(requestedPeriod);
+        PublicReportMapper.PersistedIssue published = mapper.findPublishedIssue(period.name(), requestedAnchor);
+        if (published != null) return persisted(period, published);
+        return generateLive(period, requestedAnchor);
+    }
+
+    public ReportResponse generateLive(String requestedPeriod, LocalDate requestedAnchor) {
+        return generateLive(parsePeriod(requestedPeriod), requestedAnchor);
+    }
+
+    private ReportResponse generateLive(Period period, LocalDate requestedAnchor) {
         LocalDate latest = mapper.latestPublishedDate();
         LocalDate anchor = requestedAnchor != null
                 ? requestedAnchor
@@ -48,13 +58,28 @@ public class PublicReportService {
         ReportView view = new ReportView(
                 period.name(), periodLabel(period), volume(period, range.startDate()),
                 range.startDate(), range.endDate(), headline, lead,
-                metrics.storyCount(), metrics.sourceCount(), metrics.officialSourceCount(),
+                metrics.storyCount(), metrics.eventCount(), metrics.sourceCount(), metrics.officialSourceCount(),
                 metrics.featuredCount(), estimatedMinutes(metrics.storyCount()),
                 highlights, sections);
         List<ArchiveItem> archive = mapper.archiveBuckets(period.name(), period == Period.DAILY ? 31 : 18)
                 .stream()
                 .map(row -> new ArchiveItem(row.anchorDate(), row.storyCount(), row.leadTitle()))
                 .toList();
+        return new ReportResponse(view, archive);
+    }
+
+    private ReportResponse persisted(Period period, PublicReportMapper.PersistedIssue issue) {
+        List<Section> sections = mapper.publishedSections(issue.id()).stream().map(section -> {
+            List<ReportItem> items = mapper.publishedSectionItems(section.id()).stream().map(this::toItem).toList();
+            return new Section(section.sectionCode(), section.title(), items);
+        }).toList();
+        List<Highlight> highlights = sections.stream().map(section -> new Highlight(section.code(), section.label(),
+                section.items().size(), section.items().isEmpty() ? null : compactTitle(section.items().get(0).title()))).toList();
+        ReportView view = new ReportView(period.name(), periodLabel(period), issue.volume(), issue.startDate(), issue.endDate(),
+                issue.headline(), issue.lead(), issue.storyCount(), issue.eventCount(), issue.sourceCount(),
+                issue.officialSourceCount(), issue.featuredCount(), issue.estimatedMinutes(), highlights, sections);
+        List<ArchiveItem> archive = mapper.publishedArchive(period.name(), period == Period.DAILY ? 31 : 18).stream()
+                .map(row -> new ArchiveItem(row.anchorDate(), row.storyCount(), row.leadTitle())).toList();
         return new ReportResponse(view, archive);
     }
 
@@ -133,7 +158,7 @@ public class PublicReportService {
             if (index > 0) builder.append("；");
             builder.append(compactTitle(items.get(index).title()));
         }
-        return builder.append("。报告为规则化实时聚合，正式编辑修订流程将在 M6 完成。").toString();
+        return builder.append("。本内容由规则生成草稿，管理员可在报告编辑台校订并发布正式版本。").toString();
     }
 
     private String periodLabel(Period period) {
@@ -173,7 +198,7 @@ public class PublicReportService {
     public record ReportResponse(ReportView report, List<ArchiveItem> archive) {}
     public record ReportView(
             String period, String periodLabel, String volume, LocalDate startDate, LocalDate endDate,
-            String headline, String lead, long storyCount, long sourceCount, long officialSourceCount,
+            String headline, String lead, long storyCount, long eventCount, long sourceCount, long officialSourceCount,
             long featuredCount, int estimatedMinutes, List<Highlight> highlights, List<Section> sections) {}
     public record ArchiveItem(LocalDate anchorDate, long storyCount, String leadTitle) {}
     public record Highlight(String code, String label, int displayedCount, String leadTitle) {}

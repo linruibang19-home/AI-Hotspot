@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aihotspot.core.content.FavoriteMapper">
+    <insert id="insert">
+        insert into content.favorite (user_id, target_type, target_id)
+        values (#{userId}, #{targetType}, #{targetId}) on conflict do nothing
+    </insert>
+    <delete id="delete">
+        delete from content.favorite where user_id = #{userId} and target_type = #{targetType} and target_id = #{targetId}
+    </delete>
+    <select id="exists" resultType="boolean">
+        select exists(select 1 from content.favorite where user_id = #{userId} and target_type = #{targetType} and target_id = #{targetId})
+    </select>
+    <select id="listContent" resultType="com.aihotspot.core.content.PublicContentMapper$PublicContentView">
+        select c.id, s.name as source_name, c.source_type, c.source_official_level,
+               c.content_type, coalesce(c.title_zh, c.original_title) as title,
+               c.original_title, c.summary_zh as summary, c.recommendation_reason,
+               c.original_url, c.canonical_url, c.fact_status, c.final_score, c.featured,
+               c.source_published_at, c.published_at
+        from content.favorite f
+        join content.content_item c on c.id = f.target_id
+        join source.source_entity s on s.id = c.source_entity_id
+        where f.user_id = #{userId} and f.target_type = 'CONTENT'
+          and c.publication_status = 'PUBLISHED' and c.visibility = 'PUBLIC'
+          and c.admission_status = 'PASSED' and c.is_duplicate = false and c.fact_status &lt;&gt; 'DEBUNKED'
+        order by f.created_at desc, c.id desc
+    </select>
+</mapper>

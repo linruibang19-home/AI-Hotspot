@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aihotspot.core.content.ReportEditorialMapper">
+    <select id="upsertIssue" resultType="string" affectData="true">
+        insert into content.report_issue (id, period, start_date, end_date, volume, headline, lead,
+            story_count, event_count, source_count, official_source_count, featured_count, estimated_minutes,
+            generation_metadata)
+        values (#{id}, #{period}, #{startDate}, #{endDate}, #{volume}, #{headline}, #{lead},
+            #{storyCount}, #{eventCount}, #{sourceCount}, #{officialSourceCount}, #{featuredCount}, #{estimatedMinutes},
+            '{"generator":"M6_RULE_BASED","version":"1"}'::jsonb)
+        on conflict (period, start_date) do update set
+            end_date=excluded.end_date, volume=excluded.volume, headline=excluded.headline, lead=excluded.lead,
+            story_count=excluded.story_count, event_count=excluded.event_count, source_count=excluded.source_count,
+            official_source_count=excluded.official_source_count, featured_count=excluded.featured_count,
+            estimated_minutes=excluded.estimated_minutes, status='DRAFT', published_at=null, published_by=null,
+            generated_at=now(), updated_at=now(), version=content.report_issue.version+1
+        returning id::text
+    </select>
+    <delete id="deleteSections">delete from content.report_section where report_issue_id = #{issueId}</delete>
+    <insert id="insertSection">
+        insert into content.report_section (id, report_issue_id, section_code, title, sort_order)
+        values (#{id}, #{issueId}, #{code}, #{title}, #{sortOrder})
+    </insert>
+    <insert id="insertItem">
+        insert into content.report_item (id, report_section_id, content_item_id, position)
+        values (#{id}, #{sectionId}, #{contentId}, #{position})
+    </insert>
+    <select id="list" resultType="com.aihotspot.core.content.ReportEditorialMapper$IssueView">
+        select id, period, start_date, end_date, volume, headline, lead, status, story_count, event_count,
+               source_count, official_source_count, featured_count, estimated_minutes, version,
+               generated_at, published_at, published_by, updated_at
+        from content.report_issue order by start_date desc, period, id desc limit #{limit}
+    </select>
+    <select id="find" resultType="com.aihotspot.core.content.ReportEditorialMapper$IssueView">
+        select id, period, start_date, end_date, volume, headline, lead, status, story_count, event_count,
+               source_count, official_source_count, featured_count, estimated_minutes, version,
+               generated_at, published_at, published_by, updated_at
+        from content.report_issue where id = #{id}
+    </select>
+    <update id="update">
+        update content.report_issue set headline=#{headline}, lead=#{lead}, version=version+1, updated_at=now()
+        where id=#{id} and version=#{version} and status='DRAFT'
+    </update>
+    <update id="publish">
+        update content.report_issue set status='PUBLISHED', published_at=now(), published_by=#{actorId},
+            version=version+1, updated_at=now() where id=#{id} and version=#{version} and status='DRAFT'
+    </update>
+</mapper>

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aihotspot.core.content.PublicDiscoveryMapper">
+    <sql id="publicPredicate">
+        c.publication_status = 'PUBLISHED' and c.visibility = 'PUBLIC'
+        and c.admission_status = 'PASSED' and c.is_duplicate = false
+        and c.fact_status &lt;&gt; 'DEBUNKED'
+    </sql>
+    <sql id="contentColumns">
+        c.id, s.name as source_name, c.source_type, c.source_official_level,
+        c.content_type, coalesce(c.title_zh, c.original_title) as title,
+        c.original_title, c.summary_zh as summary, c.recommendation_reason,
+        c.original_url, c.canonical_url, c.fact_status, c.final_score, c.featured,
+        c.source_published_at, c.published_at
+    </sql>
+    <select id="search" resultType="com.aihotspot.core.content.PublicContentMapper$PublicContentView">
+        select <include refid="contentColumns"/>
+        from content.content_item c join source.source_entity s on s.id = c.source_entity_id
+        where <include refid="publicPredicate"/>
+          and (c.search_tsv @@ websearch_to_tsquery('simple', #{query})
+               or lower(coalesce(c.title_zh, '') || ' ' || coalesce(c.original_title, '') || ' ' || coalesce(c.summary_zh, '')) like '%' || lower(#{query}) || '%')
+        <if test="sourceType != null and sourceType != ''">and c.source_type = #{sourceType}</if>
+        <if test="contentType != null and contentType != ''">and c.content_type = #{contentType}</if>
+        order by ts_rank_cd(c.search_tsv, websearch_to_tsquery('simple', #{query})) desc,
+                 c.published_at desc, c.id desc
+        limit #{limit}
+    </select>
+    <select id="listTopics" resultType="com.aihotspot.core.content.PublicDiscoveryMapper$TopicView">
+        select t.id, t.slug, t.group_code, t.name, t.description, t.query_text,
+               count(distinct c.id) as content_count,
+               count(distinct c.id) filter (where c.featured) as featured_count,
+               t.updated_at
+        from content.topic t
+        left join content.content_item c on <include refid="publicPredicate"/>
+          and c.search_tsv @@ websearch_to_tsquery('simple', replace(t.query_text, ' ', ' OR '))
+        where t.status = 'ACTIVE'
+        group by t.id
+        order by t.group_code, t.sort_order, t.id
+    </select>
+    <select id="findTopic" resultType="com.aihotspot.core.content.PublicDiscoveryMapper$TopicView">
+        select t.id, t.slug, t.group_code, t.name, t.description, t.query_text,
+               count(distinct c.id) as content_count,
+               count(distinct c.id) filter (where c.featured) as featured_count,
+               t.updated_at
+        from content.topic t
+        left join content.content_item c on <include refid="publicPredicate"/>
+          and c.search_tsv @@ websearch_to_tsquery('simple', replace(t.query_text, ' ', ' OR '))
+        where t.status = 'ACTIVE' and t.slug = #{slug}
+        group by t.id
+    </select>
+    <select id="listTopicContents" resultType="com.aihotspot.core.content.PublicContentMapper$PublicContentView">
+        select <include refid="contentColumns"/>
+        from content.content_item c join source.source_entity s on s.id = c.source_entity_id
+        where <include refid="publicPredicate"/>
+          and c.search_tsv @@ websearch_to_tsquery('simple', replace(#{queryText}, ' ', ' OR '))
+        order by c.featured desc, c.final_score desc nulls last, c.published_at desc, c.id desc
+        limit #{limit}
+    </select>
+    <select id="listEvents" resultType="com.aihotspot.core.content.PublicDiscoveryMapper$EventView">
+        select e.id, e.title, e.summary, e.category_code, e.fact_status,
+               count(distinct c.id) as content_count,
+               count(distinct c.source_entity_id) as source_count,
+               (count(distinct c.source_entity_id) * 12 + coalesce(max(c.final_score), 0) / 5
+                + greatest(0, 72 - extract(epoch from (now() - e.last_seen_at)) / 3600))::numeric(8,2) as heat_score,
+               e.first_seen_at, e.last_seen_at
+        from content.event_cluster e
+        join content.content_event_relation r on r.event_cluster_id = e.id
+        join content.content_item c on c.id = r.content_item_id and <include refid="publicPredicate"/>
+        where e.status = 'ACTIVE' and e.fact_status &lt;&gt; 'DEBUNKED'
+          and length(trim(e.title)) &gt;= 12
+        group by e.id
+        having max(c.final_score) &gt;= 70
+        order by heat_score desc, e.last_seen_at desc, e.id desc
+        limit #{limit}
+    </select>
+    <select id="findEvent" resultType="com.aihotspot.core.content.PublicDiscoveryMapper$EventView">
+        select e.id, e.title, e.summary, e.category_code, e.fact_status,
+               count(distinct c.id) as content_count,
+               count(distinct c.source_entity_id) as source_count,
+               (count(distinct c.source_entity_id) * 12 + greatest(0, 72 - extract(epoch from (now() - e.last_seen_at)) / 3600))::numeric(8,2) as heat_score,
+               e.first_seen_at, e.last_seen_at
+        from content.event_cluster e
+        join content.content_event_relation r on r.event_cluster_id = e.id
+        join content.content_item c on c.id = r.content_item_id and <include refid="publicPredicate"/>
+        where e.id = #{id} and e.status = 'ACTIVE' and e.fact_status &lt;&gt; 'DEBUNKED'
+        group by e.id
+    </select>
+    <select id="listEventContents" resultType="com.aihotspot.core.content.PublicContentMapper$PublicContentView">
+        select <include refid="contentColumns"/>
+        from content.content_event_relation r
+        join content.content_item c on c.id = r.content_item_id
+        join source.source_entity s on s.id = c.source_entity_id
+        where r.event_cluster_id = #{id} and <include refid="publicPredicate"/>
+        order by r.is_primary desc, c.source_official_level in ('OFFICIAL','FIRST_PARTY') desc,
+                 c.published_at desc, c.id desc
+        limit #{limit}
+    </select>
+</mapper>

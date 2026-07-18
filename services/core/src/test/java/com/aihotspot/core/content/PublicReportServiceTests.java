@@ -25,7 +25,7 @@ class PublicReportServiceTests {
         when(mapper.listBetween(any(), any(), eq(300))).thenReturn(List.of(content(
                 "Qwen 模型发布", "模型发布摘要", "OFFICIAL", "NEWS", Instant.parse("2026-07-17T08:00:00Z"))));
         when(mapper.metricsBetween(any(), any()))
-                .thenReturn(new PublicReportMapper.ReportMetrics(8, 5, 4, 2));
+                .thenReturn(new PublicReportMapper.ReportMetrics(8, 6, 5, 4, 2));
 
         var response = new PublicReportService(mapper).get("daily", null);
 
@@ -68,7 +68,7 @@ class PublicReportServiceTests {
         PublicReportMapper mapper = mock(PublicReportMapper.class);
         when(mapper.listBetween(any(), any(), eq(300))).thenReturn(List.of());
         when(mapper.metricsBetween(any(), any()))
-                .thenReturn(new PublicReportMapper.ReportMetrics(0, 0, 0, 0));
+                .thenReturn(new PublicReportMapper.ReportMetrics(0, 0, 0, 0, 0));
         when(mapper.archiveBuckets(any(), any(Integer.class))).thenReturn(List.of());
         return mapper;
     }

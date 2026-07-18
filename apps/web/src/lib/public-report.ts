@@ -27,6 +27,7 @@ export type PublicReportResponse = {
     headline: string;
     lead: string;
     storyCount: number;
+    eventCount: number;
     sourceCount: number;
     officialSourceCount: number;
     featuredCount: number;
