@@ -68,7 +68,7 @@ public class KnowledgeIndexService {
                 if (embeddingBatch.vectors.size() > index) {
                     List<Double> vector = embeddingBatch.vectors.get(index);
                     if (vector.size() == 1024) {
-                        jdbc.update("update knowledge.chunk set embedding=?::vector,embedding_model=?,embedding_status='READY',updated_at=now() where id=?",
+                        jdbc.update("update knowledge.chunk set embedding=?::vector,embedding_model=?,embedded_at=now() where id=?",
                                 vectorLiteral(vector), embeddingBatch.model, chunkId);
                     }
                 }

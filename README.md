@@ -124,7 +124,7 @@ docker compose --env-file .env.example config --quiet
 - 普通用户开放邮箱验证码注册与登录；管理端仍只允许 ADMIN/OPERATOR 角色进入；
 - 不支持用户自带模型密钥；
 - 不使用 Kubernetes、Kafka 或 Elasticsearch；
-- 已实现 RSS/Atom、Website、Sitemap、GitHub、arXiv、Hacker News 等公开 Connector；正式目录现有 82 个 Endpoint，79 个启用，3 个因上游接口限制或已有稳定替代源而明确暂停。M5 已实现内容质量与事件治理；报告编辑发布、RAG、订阅投递和 Agent 后端仍按 M6～M9 逐步实现。
+- 已实现 RSS/Atom、Website、Sitemap、GitHub、arXiv、Hacker News 等公开 Connector；正式目录现有 82 个 Endpoint，79 个启用，3 个因上游接口限制或已有稳定替代源而明确暂停。M0～M10 的本地功能代码和验收脚本均已交付；真实 Provider、生产 SMTP、Linux/HTTPS 和合规仍由发布门禁阻止提前宣称 Beta 就绪。
 
 数据库、中间件端口和 Navicat 连接方式见 [本地中间件与数据库连接指南](./AI%20Hotspot%20项目方案/10%20测试运维与质量保障/本地中间件与数据库连接指南.md)。
 

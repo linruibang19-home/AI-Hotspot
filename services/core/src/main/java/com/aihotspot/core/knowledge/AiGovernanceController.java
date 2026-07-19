@@ -17,6 +17,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.web.client.RestClient;
 import tools.jackson.databind.ObjectMapper;
 
 @RestController
@@ -24,9 +27,10 @@ import tools.jackson.databind.ObjectMapper;
 @PreAuthorize("hasAuthority('ai-config:manage')")
 public class AiGovernanceController {
     private final JdbcTemplate jdbc; private final KnowledgeIndexService indexer;
-    private final OutboxStore outbox; private final ObjectMapper objectMapper;
-    public AiGovernanceController(JdbcTemplate jdbc,KnowledgeIndexService indexer,OutboxStore outbox,ObjectMapper objectMapper){
-        this.jdbc=jdbc;this.indexer=indexer;this.outbox=outbox;this.objectMapper=objectMapper;
+    private final OutboxStore outbox; private final ObjectMapper objectMapper; private final RestClient ai;
+    public AiGovernanceController(JdbcTemplate jdbc,KnowledgeIndexService indexer,OutboxStore outbox,ObjectMapper objectMapper,
+            @Value("${ai-hotspot.ai-base-url}") String aiBaseUrl){
+        this.jdbc=jdbc;this.indexer=indexer;this.outbox=outbox;this.objectMapper=objectMapper;this.ai=RestClient.create(aiBaseUrl);
     }
     @GetMapping("/configs") public List<Map<String,Object>> configs(){return jdbc.queryForList("select id,task_type,provider_name,model_name,base_url,credential_ref,status,timeout_ms,parameters::text parameters,updated_at from knowledge.provider_config order by task_type");}
     @PutMapping("/configs") public void save(@RequestBody ConfigRequest body,@AuthenticationPrincipal AppUserPrincipal user){
@@ -74,22 +78,71 @@ public class AiGovernanceController {
         }
         return Map.of("queued",rows.size(),"batchLimit",batchSize);
     }
+    @GetMapping("/reprocess/status")
+    public Map<String,Object> reprocessStatus(){
+        return jdbc.queryForMap("""
+            select count(*) filter(where admission_status='FAILED' and publication_status='REJECTED'
+                       and lower(coalesce(provider_name,'')) in ('mock','test','fixture')) remaining_mock,
+                   count(*) filter(where admission_status='PENDING' and provider_name is null) processing,
+                   count(*) filter(where admission_status='PASSED' and provider_name is not null
+                       and lower(provider_name) not in ('mock','test','fixture')) real_admitted,
+                   count(*) filter(where publication_status='PUBLISHED' and visibility='PUBLIC') public_content
+            from content.content_item
+            """);
+    }
     @GetMapping("/metrics") public Map<String,Object> metrics(){
         List<Map<String,Object>> recent=jdbc.queryForList("select capability,provider_name,model_name,status,latency_ms,input_tokens,output_tokens,estimated_cost,error_code,recorded_at from knowledge.provider_metric order by recorded_at desc limit 100");
         Map<String,Object> summary=jdbc.queryForMap("select count(*) calls,coalesce(round(avg(latency_ms)),0) avg_latency_ms,count(*) filter(where status<>'SUCCEEDED') failures,coalesce(sum(estimated_cost),0) estimated_cost from knowledge.provider_metric where recorded_at>=now()-interval '24 hours'");
         return Map.of("summary",summary,"recent",recent);
     }
+    @GetMapping("/runtime") @SuppressWarnings("unchecked") public Map<String,Object> runtime(){
+        Map<String,Object> providers=ai.get().uri("/api/v1/providers").retrieve().body(Map.class);
+        return providers==null?Map.of():providers;
+    }
+    @PostMapping("/smoke") @SuppressWarnings("unchecked") public Map<String,Object> smoke(){
+        Map<String,Object> providers=runtime();
+        Map<String,Object> generation=(Map<String,Object>)providers.getOrDefault("generation",Map.of());
+        Map<String,Object> embedding=(Map<String,Object>)providers.getOrDefault("embedding",Map.of());
+        Map<String,Object> rerank=(Map<String,Object>)providers.getOrDefault("rerank",Map.of());
+        boolean realGeneration=isReal(generation); boolean realEmbedding=isReal(embedding); boolean realRerank=isReal(rerank);
+        boolean generationOk=false; boolean embeddingOk=false; boolean rerankOk=false;
+        Map<String,Object> evidence=new java.util.LinkedHashMap<>(); evidence.put("providers",providers);
+        if(realGeneration){Map<String,Object> result=ai.post().uri("/api/v1/generate").contentType(MediaType.APPLICATION_JSON).body(Map.of("prompt","只回答：AI Hotspot Provider 正常")).retrieve().body(Map.class);generationOk=result!=null&&!String.valueOf(result.getOrDefault("text","")).isBlank();evidence.put("generation",Map.of("ok",generationOk));}
+        if(realEmbedding){Map<String,Object> result=ai.post().uri("/api/v1/embed").contentType(MediaType.APPLICATION_JSON).body(Map.of("texts",List.of("AI Hotspot 向量测试"))).retrieve().body(Map.class);List<Object> vectors=(List<Object>)(result==null?List.of():result.getOrDefault("vectors",List.of()));int dimensions=vectors.isEmpty()?0:((List<?>)vectors.get(0)).size();embeddingOk=!vectors.isEmpty()&&dimensions==1024;evidence.put("embedding",Map.of("ok",embeddingOk,"dimensions",dimensions));}
+        if(realRerank){Map<String,Object> result=ai.post().uri("/api/v1/rerank").contentType(MediaType.APPLICATION_JSON).body(Map.of("query","AI 模型","documents",List.of(Map.of("id","a","text","AI 模型发布"),Map.of("id","b","text","天气预报")),"top_n",1)).retrieve().body(Map.class);rerankOk=result!=null&&!((List<?>)result.getOrDefault("results",List.of())).isEmpty();evidence.put("rerank",Map.of("ok",rerankOk));}
+        boolean passed=realGeneration&&realEmbedding&&realRerank&&generationOk&&embeddingOk&&rerankOk;
+        evidence.put("passed",passed); evidence.put("detail",passed?"三个真实 Provider 烟测通过":"Provider 仍为 Mock 或未完整启用");
+        return evidence;
+    }
     @GetMapping("/evaluations") public List<Map<String,Object>> evaluations(){return jdbc.queryForList("select er.id,es.name,es.capability,er.status,er.metrics::text metrics,er.passed,er.started_at,er.completed_at from knowledge.evaluation_run er join knowledge.evaluation_suite es on es.id=er.suite_id order by er.started_at desc limit 30");}
     @PostMapping("/evaluations/run") public Map<String,Object> evaluate(@AuthenticationPrincipal AppUserPrincipal user){
         UUID suite=jdbc.queryForObject("select id from knowledge.evaluation_suite where code='RAG_BASELINE_ZH'",UUID.class); UUID run=UUID.randomUUID();
         long mockPublic=jdbc.queryForObject("select count(*) from content.content_item where publication_status='PUBLISHED' and visibility='PUBLIC' and (provider_name is null or lower(provider_name) in ('mock','test','fixture'))",Long.class);
-        long unsupported=jdbc.queryForObject("select count(*) from research.citation where support_status='REJECTED'",Long.class);
+        long citations=jdbc.queryForObject("select count(*) from research.citation",Long.class);
+        long supported=jdbc.queryForObject("select count(*) from research.citation where support_status='SUPPORTED'",Long.class);
         long indexed=jdbc.queryForObject("select count(*) from knowledge.document where status='INDEXED'",Long.class);
-        boolean passed=mockPublic==0 && unsupported==0;
-        String metrics="{\"mockPublic\":"+mockPublic+",\"rejectedCitations\":"+unsupported+",\"indexedDocuments\":"+indexed+",\"aclLeaks\":0}";
-        jdbc.update("insert into knowledge.evaluation_run(id,suite_id,status,provider_snapshot,metrics,passed,started_by,completed_at) values(?,?,'SUCCEEDED','{}'::jsonb,?::jsonb,?,?,now())",run,suite,metrics,passed,user.id());
-        return Map.of("runId",run,"passed",passed,"metrics",Map.of("mockPublic",mockPublic,"rejectedCitations",unsupported,"indexedDocuments",indexed,"aclLeaks",0));
+        long aclLeaks=jdbc.queryForObject("""
+            select count(*) from knowledge.document d join knowledge.dataset ds on ds.id=d.dataset_id
+            left join content.content_item c on c.id=d.content_item_id
+            where d.status='INDEXED' and ds.visibility='PUBLIC' and c.id is not null
+              and not(c.publication_status='PUBLISHED' and c.visibility='PUBLIC')
+            """,Long.class);
+        List<Map<String,Object>> cases=jdbc.queryForList("select case_key,input_data::text input_data,expected_data::text expected_data from knowledge.evaluation_case where suite_id=? order by case_key",suite);
+        int hits=0; double ndcgTotal=0; List<Map<String,Object>> caseResults=new java.util.ArrayList<>();
+        for(Map<String,Object> test:cases){Map<String,Object> input=fromJson(String.valueOf(test.get("input_data")));Map<String,Object> expected=fromJson(String.valueOf(test.get("expected_data")));String query=String.valueOf(input.get("query"));List<String> terms=((List<?>)expected.getOrDefault("mustContainAny",List.of())).stream().map(String::valueOf).toList();List<Map<String,Object>> rows=jdbc.queryForList("""
+            select d.title,ch.content_text from knowledge.chunk ch join knowledge.document d on d.id=ch.document_id
+            join knowledge.dataset ds on ds.id=d.dataset_id where d.status='INDEXED' and ds.visibility='PUBLIC'
+              and (ch.search_tsv @@ websearch_to_tsquery('simple',?) or lower(ch.content_text) like '%'||lower(?)||'%')
+            order by ts_rank_cd(ch.search_tsv,websearch_to_tsquery('simple',?)) desc,ch.source_published_at desc nulls last limit 20
+            """,query,query,query);int firstRelevant=0;for(int i=0;i<rows.size();i++){String text=(String.valueOf(rows.get(i).get("title"))+" "+String.valueOf(rows.get(i).get("content_text"))).toLowerCase();if(terms.stream().anyMatch(term->text.contains(term.toLowerCase()))){firstRelevant=i+1;break;}}boolean hit=firstRelevant>0;if(hit){hits++;ndcgTotal+=1.0/(Math.log(firstRelevant+1)/Math.log(2));}caseResults.add(Map.of("caseKey",test.get("case_key"),"hit",hit,"firstRelevantRank",firstRelevant,"candidates",rows.size()));}
+        double recall=cases.isEmpty()?0:(double)hits/cases.size(); double ndcg=cases.isEmpty()?0:ndcgTotal/cases.size(); double citationSupport=citations==0?0:(double)supported/citations;
+        boolean passed=mockPublic==0&&aclLeaks==0&&indexed>0&&cases.size()>=10&&recall>=0.80&&ndcg>=0.70&&citationSupport>=0.95;
+        Map<String,Object> metricMap=new java.util.LinkedHashMap<>();metricMap.put("caseCount",cases.size());metricMap.put("recallAt20",recall);metricMap.put("ndcgAt10",ndcg);metricMap.put("citationSupport",citationSupport);metricMap.put("citationCount",citations);metricMap.put("indexedDocuments",indexed);metricMap.put("mockPublic",mockPublic);metricMap.put("aclLeaks",aclLeaks);metricMap.put("cases",caseResults);
+        jdbc.update("insert into knowledge.evaluation_run(id,suite_id,status,provider_snapshot,metrics,passed,started_by,completed_at) values(?,?,'SUCCEEDED',?::jsonb,?::jsonb,?,?,now())",run,suite,toJson(runtime()),toJson(metricMap),passed,user.id());
+        return Map.of("runId",run,"passed",passed,"metrics",metricMap);
     }
     public record ConfigRequest(String taskType,String providerName,String modelName,String baseUrl,String credentialRef,String status,Integer timeoutMs,String parametersJson){}
+    private static boolean isReal(Map<String,Object> provider){String name=String.valueOf(provider.getOrDefault("provider",""));return !name.isBlank()&&!List.of("mock","test","fixture").contains(name.toLowerCase());}
+    @SuppressWarnings("unchecked") private Map<String,Object> fromJson(String value){try{return objectMapper.readValue(value,Map.class);}catch(Exception exception){return Map.of();}}
     private String toJson(Object value){try{return objectMapper.writeValueAsString(value);}catch(Exception exception){throw new IllegalStateException("无法创建重处理事件",exception);}}
 }

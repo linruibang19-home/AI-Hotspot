@@ -1,6 +1,7 @@
 package com.aihotspot.core.agent;
 
 import com.aihotspot.core.auth.AppUserPrincipal;
+import com.aihotspot.core.auth.DatabaseUserDetailsService;
 import com.aihotspot.core.knowledge.ResearchService;
 import com.aihotspot.core.subscription.SubscriptionService;
 import java.nio.charset.StandardCharsets;
@@ -16,8 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AgentService {
-    private final JdbcTemplate jdbc; private final ResearchService research; private final SubscriptionService subscriptions;
-    public AgentService(JdbcTemplate jdbc,ResearchService research,SubscriptionService subscriptions){this.jdbc=jdbc;this.research=research;this.subscriptions=subscriptions;}
+    private final JdbcTemplate jdbc; private final ResearchService research; private final SubscriptionService subscriptions; private final DatabaseUserDetailsService users;
+    public AgentService(JdbcTemplate jdbc,ResearchService research,SubscriptionService subscriptions,DatabaseUserDetailsService users){this.jdbc=jdbc;this.research=research;this.subscriptions=subscriptions;this.users=users;}
     public List<Map<String,Object>> definitions(){return jdbc.queryForList("select id,code,name,description,risk_level,coalesce(array_to_json(allowed_tools),'[]'::json)::text allowed_tools,status from automation.agent_definition where status='ACTIVE' order by risk_level,code");}
     public List<Map<String,Object>> runs(UUID userId){return jdbc.queryForList("select r.id,d.code agent_code,d.name agent_name,r.objective,r.status,r.risk_level,r.result_data::text result_data,r.error_message,r.token_usage,r.started_at,r.completed_at,r.created_at from automation.agent_run r join automation.agent_definition d on d.id=r.agent_definition_id where r.user_id=? order by r.created_at desc limit 50",userId);}
     public List<Map<String,Object>> pendingApprovals(){return jdbc.queryForList("select a.id,a.agent_run_id,a.status,a.expires_at,a.created_at,r.objective,d.name agent_name,u.email::text requested_by_email from automation.approval_request a join automation.agent_run r on r.id=a.agent_run_id join automation.agent_definition d on d.id=r.agent_definition_id join iam.user_account u on u.id=a.requested_by where a.status='PENDING' and a.expires_at>now() order by a.created_at");}
@@ -37,7 +38,9 @@ public class AgentService {
         Map<String,Object> request=jdbc.queryForMap("select a.*,r.user_id,d.code,r.objective from automation.approval_request a join automation.agent_run r on r.id=a.agent_run_id join automation.agent_definition d on d.id=r.agent_definition_id where a.id=? and a.status='PENDING' and a.expires_at>now()",approvalId);
         String status=approve?"APPROVED":"REJECTED";jdbc.update("update automation.approval_request set status=?,decided_by=?,decision_note=?,decided_at=now() where id=?",status,approver.id(),note,approvalId);UUID runId=(UUID)request.get("agent_run_id");
         if(!approve){jdbc.update("update automation.agent_run set status='CANCELLED',error_message='审批拒绝',completed_at=now() where id=?",runId);return;}
-        UUID ownerId=(UUID)request.get("user_id");AppUserPrincipal owner=ownerId.equals(approver.id())?approver:approver;
+        UUID ownerId=(UUID)request.get("user_id");
+        String ownerEmail=jdbc.queryForObject("select email::text from iam.user_account where id=?",String.class,ownerId);
+        AppUserPrincipal owner=ownerId.equals(approver.id())?approver:users.loadActivePrincipal(ownerEmail);
         Map<String,Object> step=jdbc.queryForMap("select s.id step_id,t.id call_id from automation.agent_step s join automation.tool_call t on t.agent_step_id=s.id where s.agent_run_id=? order by s.step_no limit 1",runId);
         jdbc.update("update automation.agent_run set status='RUNNING',started_at=coalesce(started_at,now()) where id=?",runId);execute(owner,runId,String.valueOf(request.get("code")),String.valueOf(request.get("objective")),(UUID)step.get("step_id"),(UUID)step.get("call_id"));
     }
