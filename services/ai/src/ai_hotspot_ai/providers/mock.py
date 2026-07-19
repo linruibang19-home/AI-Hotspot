@@ -13,7 +13,7 @@ class MockGenerationProvider(GenerationProvider):
     model = "mock-generation-v1"
 
     async def generate(self, prompt: str) -> str:
-        if prompt.startswith("AI_HOTSPOT_CONTENT_ANALYSIS_V1"):
+        if prompt.startswith("AI_HOTSPOT_CONTENT_ANALYSIS_V"):
             fields = {}
             for line in prompt.splitlines():
                 if "：" in line:
@@ -30,7 +30,16 @@ class MockGenerationProvider(GenerationProvider):
                     "entities": [],
                     "factStatus": "CONFIRMED",
                     "confidenceScore": 80,
-                    "recommendationReason": "内容来自公开信源，已通过可重复的 Mock 质量分析。",
+                    "aiRelevance": 80,
+                    "completeness": 70,
+                    "clarity": 70,
+                    "sourceEvidence": 70,
+                    "novelty": 60,
+                    "impact": 60,
+                    "informationDensity": 65,
+                    "marketingPenalty": 5,
+                    "rumorPenalty": 0,
+                    "recommendationReason": "[开发测试结果，不允许公开] Mock Provider 未执行真实内容评审。",
                 },
                 ensure_ascii=False,
             )

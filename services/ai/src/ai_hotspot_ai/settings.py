@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     generation_provider: Literal["mock", "openai-compatible"] = "mock"
     generation_base_url: str | None = None
-    generation_model: str = "deepseek-chat"
+    generation_model: str = "deepseek-v4-flash"
     generation_api_key: str | None = None
 
     embedding_provider: Literal["mock", "remote"] = "mock"

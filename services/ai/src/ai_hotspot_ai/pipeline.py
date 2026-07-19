@@ -12,6 +12,7 @@ from ai_hotspot_ai.repository import (
     begin_inbox,
     complete_inbox,
     finish_content,
+    finish_mock_content,
     finish_not_modified,
     load_content,
     persist_feed,
@@ -93,6 +94,18 @@ def process_content_event(payload: dict[str, object], settings: Settings) -> dic
         complete_inbox(payload, CONTENT_CONSUMER, result)
         return result
     registry = get_provider_registry()
+    if registry.generation.name.lower() in {"mock", "test", "fixture"}:
+        finish_mock_content(context, registry.generation.name, registry.generation.model)
+        result = {
+            "published": False,
+            "finalScore": None,
+            "factStatus": "UNVERIFIED",
+            "category": None,
+            "provider": registry.generation.name,
+            "reason": "development-provider-quarantined",
+        }
+        complete_inbox(payload, CONTENT_CONSUMER, result)
+        return result
     analysis = asyncio.run(
         analyze_content(
             registry.generation,
@@ -120,8 +133,10 @@ def process_content_event(payload: dict[str, object], settings: Settings) -> dic
         final_score=analysis.final_score,
         provider_name=registry.generation.name,
         provider_model=registry.generation.model,
-        relevance_threshold=settings.content_relevance_threshold,
-        quality_threshold=settings.content_quality_threshold,
+        # Mock remains available for deterministic tests, but it is never allowed
+        # to cross the public publication gate.
+        relevance_threshold=101.0 if registry.generation.name == "mock" else settings.content_relevance_threshold,
+        quality_threshold=101.0 if registry.generation.name == "mock" else settings.content_quality_threshold,
     )
     result = {
         "published": published,

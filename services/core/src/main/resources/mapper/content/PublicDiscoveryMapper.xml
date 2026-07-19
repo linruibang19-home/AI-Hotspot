@@ -5,6 +5,8 @@
         c.publication_status = 'PUBLISHED' and c.visibility = 'PUBLIC'
         and c.admission_status = 'PASSED' and c.is_duplicate = false
         and c.fact_status &lt;&gt; 'DEBUNKED'
+        and c.provider_name is not null
+        and lower(c.provider_name) not in ('mock', 'test', 'fixture')
     </sql>
     <sql id="contentColumns">
         c.id, s.name as source_name, c.source_type, c.source_official_level,
@@ -53,7 +55,7 @@
         from content.content_item c join source.source_entity s on s.id = c.source_entity_id
         where <include refid="publicPredicate"/>
           and c.search_tsv @@ websearch_to_tsquery('simple', replace(#{queryText}, ' ', ' OR '))
-        order by c.featured desc, c.final_score desc nulls last, c.published_at desc, c.id desc
+        order by c.published_at desc, c.id desc
         limit #{limit}
     </select>
     <select id="listEvents" resultType="com.aihotspot.core.content.PublicDiscoveryMapper$EventView">

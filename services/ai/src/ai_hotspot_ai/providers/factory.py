@@ -6,6 +6,7 @@ from ai_hotspot_ai.settings import Settings, get_settings
 from .base import EmbeddingProvider, GenerationProvider, RerankProvider
 from .mock import MockEmbeddingProvider, MockGenerationProvider, MockRerankProvider
 from .openai_compatible import OpenAICompatibleGenerationProvider
+from .remote import RemoteEmbeddingProvider, RemoteRerankProvider
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,8 +17,6 @@ class ProviderRegistry:
 
 
 def build_provider_registry(settings: Settings) -> ProviderRegistry:
-    if settings.embedding_provider != "mock" or settings.rerank_provider != "mock":
-        raise RuntimeError("Remote embedding/rerank adapters are not enabled until the RAG stage")
     if settings.generation_provider == "openai-compatible":
         if not settings.generation_base_url or not settings.generation_api_key:
             raise RuntimeError("GENERATION_BASE_URL and GENERATION_API_KEY are required")
@@ -26,11 +25,11 @@ def build_provider_registry(settings: Settings) -> ProviderRegistry:
         )
     else:
         generation = MockGenerationProvider()
-    return ProviderRegistry(
-        generation=generation,
-        embedding=MockEmbeddingProvider(),
-        rerank=MockRerankProvider(),
-    )
+    embedding = (RemoteEmbeddingProvider(settings.embedding_base_url, settings.embedding_api_key, settings.embedding_model)
+                 if settings.embedding_provider == "remote" and settings.embedding_base_url else MockEmbeddingProvider())
+    rerank = (RemoteRerankProvider(settings.rerank_base_url, settings.rerank_api_key, settings.rerank_model)
+              if settings.rerank_provider == "remote" and settings.rerank_base_url else MockRerankProvider())
+    return ProviderRegistry(generation=generation, embedding=embedding, rerank=rerank)
 
 
 @lru_cache

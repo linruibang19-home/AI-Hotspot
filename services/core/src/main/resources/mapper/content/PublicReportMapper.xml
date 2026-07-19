@@ -7,6 +7,8 @@
         and c.admission_status = 'PASSED'
         and c.is_duplicate = false
         and c.fact_status &lt;&gt; 'DEBUNKED'
+        and c.provider_name is not null
+        and lower(c.provider_name) not in ('mock', 'test', 'fixture')
     </sql>
 
     <select id="listBetween" resultType="com.aihotspot.core.content.PublicContentMapper$PublicContentView">
@@ -65,17 +67,31 @@
     </select>
 
     <select id="findPublishedIssue" resultType="com.aihotspot.core.content.PublicReportMapper$PersistedIssue">
-        select id, period, volume, start_date, end_date, headline, lead, story_count, event_count,
-               source_count, official_source_count, featured_count, estimated_minutes
-        from content.report_issue
-        where period = #{period} and status = 'PUBLISHED'
-        <choose><when test="anchor != null">and start_date &lt;= #{anchor} and end_date &gt;= #{anchor}</when></choose>
-        order by start_date desc, id desc limit 1
+        select issue.id, issue.period, issue.volume, issue.start_date, issue.end_date, issue.headline,
+               issue.lead, issue.story_count, issue.event_count, issue.source_count,
+               issue.official_source_count, issue.featured_count, issue.estimated_minutes
+        from content.report_issue issue
+        where issue.period = #{period} and issue.status = 'PUBLISHED'
+          and exists (
+            select 1 from content.report_section section
+            join content.report_item item on item.report_section_id = section.id
+            join content.content_item c on c.id = item.content_item_id
+            where section.report_issue_id = issue.id and <include refid="publicPredicate"/>
+          )
+        <choose><when test="anchor != null">and issue.start_date &lt;= #{anchor} and issue.end_date &gt;= #{anchor}</when></choose>
+        order by issue.start_date desc, issue.id desc limit 1
     </select>
     <select id="publishedArchive" resultType="com.aihotspot.core.content.PublicReportMapper$ArchiveBucket">
-        select start_date as anchor_date, story_count, headline as lead_title
-        from content.report_issue where period = #{period} and status = 'PUBLISHED'
-        order by start_date desc, id desc limit #{limit}
+        select issue.start_date as anchor_date, issue.story_count, issue.headline as lead_title
+        from content.report_issue issue
+        where issue.period = #{period} and issue.status = 'PUBLISHED'
+          and exists (
+            select 1 from content.report_section section
+            join content.report_item item on item.report_section_id = section.id
+            join content.content_item c on c.id = item.content_item_id
+            where section.report_issue_id = issue.id and <include refid="publicPredicate"/>
+          )
+        order by issue.start_date desc, issue.id desc limit #{limit}
     </select>
     <select id="publishedSections" resultType="com.aihotspot.core.content.PublicReportMapper$PersistedSection">
         select id, section_code, title, summary, sort_order from content.report_section

@@ -7,6 +7,8 @@
         and c.admission_status = 'PASSED'
         and c.is_duplicate = false
         and c.fact_status &lt;&gt; 'DEBUNKED'
+        and c.provider_name is not null
+        and lower(c.provider_name) not in ('mock', 'test', 'fixture')
     </sql>
 
     <select id="list" resultType="com.aihotspot.core.content.PublicContentMapper$PublicContentView">

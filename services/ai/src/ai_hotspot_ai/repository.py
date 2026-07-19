@@ -624,6 +624,42 @@ def finish_content(
     return published
 
 
+def finish_mock_content(context: ContentContext, provider_name: str, provider_model: str) -> None:
+    """Keep the authentic source record while refusing to persist synthetic analysis prose."""
+    with psycopg.connect(database_dsn()) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            update content.content_item
+            set title_zh = null, summary_zh = null, recommendation_reason = null,
+                category_code = null, confidence_score = null, quality_dimensions = '{}'::jsonb,
+                generation_metadata = jsonb_build_object('developmentOnly', true, 'publishable', false),
+                relevance_score = null, quality_score = null, final_score = null,
+                featured = false, admission_status = 'FAILED', publication_status = 'REJECTED',
+                visibility = 'PRIVATE', provider_name = %s, provider_model = %s,
+                processing_version = 'm7-real-provider-gate', processed_at = now(),
+                published_at = null, version = version + 1, updated_at = now()
+            where id = %s and admission_status = 'PENDING'
+            """,
+            (provider_name, provider_model, context.content_id),
+        )
+        cursor.execute(
+            """
+            insert into content.model_run (id, content_item_id, provider_name, provider_model,
+                prompt_version, status, input_fingerprint, output_data)
+            values (%s, %s, %s, %s, 'development-provider-gate-v1', 'SUCCEEDED', %s,
+                jsonb_build_object('developmentOnly', true, 'publishable', false))
+            """,
+            (
+                uuid.uuid4(), context.content_id, provider_name, provider_model,
+                _fingerprint(f"{context.title}\n{context.summary or ''}"),
+            ),
+        )
+        cursor.execute(
+            "update source.raw_entry set normalization_status='NORMALIZED',updated_at=now() where id=%s",
+            (context.raw_entry_id,),
+        )
+
+
 def _find_duplicate(context: ContentContext) -> tuple[uuid.UUID | None, float | None]:
     with (
         psycopg.connect(database_dsn()) as connection,

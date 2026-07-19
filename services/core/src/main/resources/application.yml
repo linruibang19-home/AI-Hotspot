@@ -96,6 +96,12 @@ ai-hotspot:
   mail:
     provider: ${MAIL_PROVIDER:mock}
     from: ${MAIL_FROM:AI Hotspot <no-reply@ai-hotspot.local>}
+    unsubscribe-secret: ${UNSUBSCRIBE_SECRET:local-change-me}
+  public-base-url: ${PUBLIC_BASE_URL:http://127.0.0.1:3000}
+  knowledge:
+    index-fixed-delay: ${KNOWLEDGE_INDEX_FIXED_DELAY_MS:60000}
+  subscription:
+    fixed-delay: ${SUBSCRIPTION_FIXED_DELAY_MS:60000}
   bootstrap-admin:
     enabled: ${BOOTSTRAP_ADMIN_ENABLED:false}
     email: ${BOOTSTRAP_ADMIN_EMAIL:}

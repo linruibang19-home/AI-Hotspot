@@ -23,6 +23,7 @@
         where f.user_id = #{userId} and f.target_type = 'CONTENT'
           and c.publication_status = 'PUBLISHED' and c.visibility = 'PUBLIC'
           and c.admission_status = 'PASSED' and c.is_duplicate = false and c.fact_status &lt;&gt; 'DEBUNKED'
+          and c.provider_name is not null and lower(c.provider_name) not in ('mock', 'test', 'fixture')
         order by f.created_at desc, c.id desc
     </select>
 </mapper>

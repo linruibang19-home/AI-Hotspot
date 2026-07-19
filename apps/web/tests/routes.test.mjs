@@ -21,6 +21,8 @@ const expectedPages = [
   "src/app/admin/crawls/page.tsx",
   "src/app/admin/content/page.tsx",
   "src/app/admin/models/page.tsx",
+  "src/app/admin/readiness/page.tsx",
+  "src/app/admin/operations/page.tsx",
   "src/app/admin/reports/page.tsx",
   "src/app/admin/users/page.tsx",
   "src/app/admin/sources/[id]/page.tsx",
@@ -97,6 +99,24 @@ test("M6 topics use persistent topic and public discovery APIs", () => {
   assert.match(page, /\/topics\/\$\{topic\.slug\}/);
   assert.match(detail, /getPublicTopic/);
   assert.match(discovery, /\/api\/v1\/public/);
+  assert.match(detail, /groupByDate/);
+  assert.match(detail, /className="timeline"/);
+  assert.doesNotMatch(detail, /Mock 质量分析/);
+});
+
+test("M7-M10 workspaces use real APIs and expose governance", () => {
+  const workspaces = readFileSync("src/components/product-workspaces.tsx", "utf8");
+  const models = readFileSync("src/app/admin/models/page.tsx", "utf8");
+  const readiness = readFileSync("src/app/admin/readiness/page.tsx", "utf8");
+  const operations = readFileSync("src/app/admin/operations/page.tsx", "utf8");
+  assert.match(workspaces, /\/research\/query/);
+  assert.match(workspaces, /\/subscriptions/);
+  assert.match(workspaces, /\/agents\/runs/);
+  assert.match(models, /\/admin\/ai\/evaluations\/run/);
+  assert.match(models, /\/admin\/ai\/reindex/);
+  assert.match(readiness, /\/admin\/readiness/);
+  assert.match(operations, /\/agents\/approvals/);
+  assert.doesNotMatch(workspaces, /Mock 质量分析/);
 });
 
 test("M5 content governance uses real queues, events and ticket APIs", () => {
@@ -125,7 +145,7 @@ test("authenticated workspaces enforce a page-level session guard", () => {
   assert.match(workspaces, /需要登录/);
   assert.match(workspaces, /returnTo=/);
   assert.match(workspaces, /WorkspaceNotice/);
-  assert.match(workspaces, /onClick=.*setNotice/);
+  assert.match(workspaces, /onClose=.*setNotice/);
 });
 
 test("navigation preserves public workspaces and hides management links from regular users", () => {

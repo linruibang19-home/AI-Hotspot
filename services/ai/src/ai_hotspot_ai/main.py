@@ -84,7 +84,8 @@ async def providers(request: Request):
     }
 
 
-@app.post("/api/v1/mock/generate", response_model=GenerateResponse)
+@app.post("/api/v1/generate", response_model=GenerateResponse)
+@app.post("/api/v1/mock/generate", response_model=GenerateResponse, include_in_schema=False)
 async def generate(payload: GenerateRequest, request: Request):
     provider = _providers(request).generation
     return GenerateResponse(
@@ -94,7 +95,8 @@ async def generate(payload: GenerateRequest, request: Request):
     )
 
 
-@app.post("/api/v1/mock/embed", response_model=EmbeddingResponse)
+@app.post("/api/v1/embed", response_model=EmbeddingResponse)
+@app.post("/api/v1/mock/embed", response_model=EmbeddingResponse, include_in_schema=False)
 async def embed(payload: EmbeddingRequest, request: Request):
     provider = _providers(request).embedding
     return EmbeddingResponse(
@@ -104,7 +106,8 @@ async def embed(payload: EmbeddingRequest, request: Request):
     )
 
 
-@app.post("/api/v1/mock/rerank", response_model=RerankResponse)
+@app.post("/api/v1/rerank", response_model=RerankResponse)
+@app.post("/api/v1/mock/rerank", response_model=RerankResponse, include_in_schema=False)
 async def rerank(payload: RerankRequest, request: Request):
     provider = _providers(request).rerank
     documents = [(document.id, document.text) for document in payload.documents]

@@ -50,7 +50,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     throw new ApiError(problem);
   }
   if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  const payload = await response.text();
+  if (!payload.trim()) return undefined as T;
+  return JSON.parse(payload) as T;
 }
 
 export function resetCsrfToken() {

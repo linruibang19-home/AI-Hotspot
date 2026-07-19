@@ -47,6 +47,8 @@ export const navigation: NavigationGroup[] = [
       { href: "/admin/content", label: "内容审核", icon: "review", access: "operator" },
       { href: "/admin/reports", label: "报告编辑", icon: "report", access: "operator" },
       { href: "/admin/models", label: "模型与 Prompt", icon: "settings", access: "admin" },
+      { href: "/admin/readiness", label: "发布就绪检查", icon: "activity", access: "admin" },
+      { href: "/admin/operations", label: "投递与 Agent 审批", icon: "mail", access: "admin" },
       { href: "/admin/users", label: "用户与邀请", icon: "users", access: "admin" },
     ],
   },

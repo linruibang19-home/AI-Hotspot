@@ -1,0 +1,6 @@
+"use client";
+import { useEffect,useState } from "react";
+import { PageHeader } from "@/components/page-header";
+import { apiFetch } from "@/lib/api";
+type Report={status:string;environment:string;checks:Record<string,{status:string;value:number;expected?:number;maximum?:number}>};
+export default function ReadinessPage(){const [report,setReport]=useState<Report|null>(null);const [error,setError]=useState("");async function load(){try{setReport(await apiFetch<Report>("/admin/readiness"));}catch(e){setError(e instanceof Error?e.message:"检查失败");}}useEffect(()=>{const timer=window.setTimeout(()=>void load(),0);return()=>window.clearTimeout(timer);},[]);return <div className="page-shell"><PageHeader title="发布就绪与运行检查" description="M10 对真实模型发布、信源、死信、ACL、Agent 审批和邮件投递执行统一门禁。" action={<button className="button primary" onClick={()=>void load()}>重新检查</button>}/>{error&&<div className="notice error">{error}</div>}{report&&<><div className={`readiness-hero ${report.status.toLowerCase()}`}><strong>{report.status}</strong><span>{report.environment}</span></div><section className="readiness-grid">{Object.entries(report.checks).map(([name,c])=><article className="product-panel" key={name}><span className={`status-badge ${c.status==="PASS"?"active":"failed"}`}>{c.status}</span><h2>{name}</h2><p>当前 {c.value} · 门限 {c.expected??c.maximum}</p></article>)}</section></>}</div>}
