@@ -596,6 +596,34 @@ def finish_content(
                     float(entity.get("confidence") or 80),
                 ),
             )
+        cursor.execute("delete from content.content_topic where content_item_id = %s and assignment_source = 'RULE'", (context.content_id,))
+        cursor.execute(
+            """
+            insert into content.content_topic(content_item_id,topic_id,assignment_source,confidence)
+            select c.id,t.id,'RULE',case when t.group_code='COMPANY_MODEL' then 92 else 82 end
+            from content.content_item c
+            join source.source_entity s on s.id=c.source_entity_id
+            cross join content.topic t
+            where c.id=%s and t.status='ACTIVE' and (
+              (t.group_code='COMPANY_MODEL' and exists(
+                select 1 from unnest(string_to_array(t.query_text,' ')) token
+                where length(token)>=2 and (
+                  strpos(lower(coalesce(c.title_zh,c.original_title)),lower(token))>0
+                  or strpos(lower(s.name),lower(token))>0)))
+              or (t.group_code='TECHNOLOGY' and exists(
+                select 1 from content.content_tag tag where tag.content_item_id=c.id and (
+                  lower(tag.tag)=lower(t.name) or strpos(lower(t.name),lower(tag.tag))>0
+                  or strpos(lower(tag.tag),lower(split_part(t.name,' ',1)))>0)))
+              or (t.group_code='CONTENT_FORM' and (
+                (t.slug='model-release' and c.category_code='MODEL_RELEASE') or
+                (t.slug='research-paper' and c.category_code='RESEARCH') or
+                (t.slug='benchmark' and exists(select 1 from content.content_tag tag where tag.content_item_id=c.id and tag.tag='评测基准')) or
+                (t.slug='product-update' and c.content_type='RELEASE') or
+                (t.slug='industry' and c.category_code='INDUSTRY')))
+            ) on conflict(content_item_id,topic_id) do nothing
+            """,
+            (context.content_id,),
+        )
         cursor.execute(
             """
             insert into content.model_run (id, content_item_id, provider_name, provider_model,

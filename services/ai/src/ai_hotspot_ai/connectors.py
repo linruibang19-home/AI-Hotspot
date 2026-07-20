@@ -133,7 +133,18 @@ def _parse_website(
         if not title or len(title) < 4:
             continue
         seen.add(url)
-        entries.append(_entry(url, url, title, None, None, None, {"url": url, "title": title}))
+        published_at = _embedded_publication_date(title)
+        entries.append(
+            _entry(
+                url,
+                url,
+                title,
+                None,
+                published_at,
+                None,
+                {"url": url, "title": title, "dateSource": "LINK_TEXT" if published_at else None},
+            )
+        )
         if len(entries) >= max_items:
             break
     if not entries:
@@ -373,6 +384,24 @@ def _parse_datetime(value: object) -> datetime | None:
         return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(UTC)
     except ValueError:
         return None
+
+
+_ENGLISH_DATE = re.compile(
+    r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(\d{4})\b",
+    re.IGNORECASE,
+)
+
+
+def _embedded_publication_date(text: str) -> datetime | None:
+    """Extract only an explicit English long date exposed by a website listing item."""
+    match = _ENGLISH_DATE.search(text)
+    if not match:
+        return None
+    try:
+        value = datetime.strptime(" ".join(match.groups()), "%B %d %Y").replace(tzinfo=UTC)
+    except ValueError:
+        return None
+    return value if value <= datetime.now(UTC) else None
 
 
 def _epoch_datetime(value: object) -> datetime | None:

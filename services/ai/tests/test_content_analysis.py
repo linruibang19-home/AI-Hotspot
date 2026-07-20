@@ -71,6 +71,15 @@ async def test_unconfirmed_terms_are_labeled_and_downranked():
     assert result.quality_score < 70
 
 
+async def test_thin_non_ai_item_cannot_pass_quality_or_relevance():
+    result = await analyze_content(
+        JsonProvider(), title="手机促销", summary="手机促销", source_name="Media",
+        official_level="THIRD_PARTY", authority_score=80,
+    )
+    assert result.relevance_score < 70
+    assert result.quality_score < 60
+
+
 def test_openai_compatible_requires_external_configuration():
     try:
         build_provider_registry(Settings(generation_provider="openai-compatible"))

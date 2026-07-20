@@ -1762,9 +1762,12 @@ html[data-theme="dark"] .detail-summary { color: #afbec3; }
 .subscription-editor footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
 .research-layout { display: grid; grid-template-columns: 230px minmax(430px, 1fr) 270px; gap: 14px; padding-top: 18px; }
+.rag-pipeline{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:13px 16px;margin-top:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--muted);font-size:12px}.rag-pipeline span{padding:6px 9px;border-radius:7px;background:var(--surface-subtle);font-weight:700;color:var(--text)}.rag-pipeline b{color:var(--accent)}
+.rag-metrics{display:grid;grid-template-columns:repeat(5,1fr);margin-top:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden}.rag-metrics article{display:grid;gap:3px;padding:13px 16px;border-right:1px solid var(--border)}.rag-metrics article:last-child{border:0}.rag-metrics strong{font-size:20px}.rag-metrics span{font-size:11px;color:var(--muted)}
 .research-scope, .research-chat, .evidence-panel { min-height: 620px; padding: 18px; }
 .research-scope h2 { margin: 0 0 20px; font-size: 16px; }
 .research-scope label { margin-bottom: 15px; }
+.research-scope .check-row{display:flex;align-items:center;gap:8px;color:var(--text)}.research-scope .check-row input{width:15px;height:15px}.evidence-panel article blockquote{margin:8px 0 0;padding:8px 10px;border-left:2px solid var(--accent);background:var(--surface-subtle);color:var(--muted);font-size:11px;line-height:1.55;max-height:82px;overflow:hidden}
 .scope-note { display: flex; gap: 10px; margin-top: 30px; padding: 13px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-size: 10px; line-height: 1.6; }
 .scope-note svg { width: 20px; flex: 0 0 20px; }
 .research-chat { display: flex; flex-direction: column; }
@@ -1821,6 +1824,7 @@ html[data-theme="dark"] .detail-summary { color: #afbec3; }
 }
 @media (max-width: 760px) {
   .research-layout, .agent-grid { grid-template-columns: 1fr; }
+  .rag-metrics{grid-template-columns:repeat(2,1fr)}
   .research-scope, .research-chat, .evidence-panel { min-height: auto; }
   .form-grid { grid-template-columns: 1fr; }
   .span-2 { grid-column: auto; }

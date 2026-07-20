@@ -12,20 +12,28 @@
     </sql>
 
     <select id="list" resultType="com.aihotspot.core.content.PublicContentMapper$PublicContentView">
+        with ranked as (
         select c.id, s.name as source_name, c.source_type, c.source_official_level,
                c.content_type, coalesce(c.title_zh, c.original_title) as title,
                c.original_title, c.summary_zh as summary,
                c.recommendation_reason, c.original_url, c.canonical_url,
                c.fact_status, c.final_score, c.featured,
-               c.source_published_at, c.published_at
+               c.source_published_at, c.effective_published_at as published_at,
+               row_number() over(partition by c.source_entity_id order by c.effective_published_at desc,c.id desc) source_rank
         from content.content_item c
         join source.source_entity s on s.id = c.source_entity_id
         where <include refid="publicPredicate"/>
         <if test="featured">and c.featured = true</if>
         <if test="cursorPublishedAt != null and cursorId != null">
-            and (c.published_at, c.id) &lt; (#{cursorPublishedAt}, #{cursorId})
+            and (c.effective_published_at, c.id) &lt; (#{cursorPublishedAt}, #{cursorId})
         </if>
-        order by c.published_at desc, c.id desc
+        )
+        select id,source_name,source_type,source_official_level,content_type,title,original_title,summary,
+               recommendation_reason,original_url,canonical_url,fact_status,final_score,featured,
+               source_published_at,published_at
+        from ranked
+        where source_rank &lt;= <choose><when test="featured">case when source_official_level in ('OFFICIAL','FIRST_PARTY') then 4 else 2 end</when><otherwise>8</otherwise></choose>
+        order by published_at desc,id desc
         limit #{limit}
     </select>
 
@@ -35,7 +43,7 @@
                c.original_title, c.summary_zh as summary,
                c.recommendation_reason, c.original_url, c.canonical_url,
                c.fact_status, c.final_score, c.featured,
-               c.source_published_at, c.published_at
+               c.source_published_at, c.effective_published_at as published_at
         from content.content_item c
         join source.source_entity s on s.id = c.source_entity_id
         where c.id = #{id} and <include refid="publicPredicate"/>

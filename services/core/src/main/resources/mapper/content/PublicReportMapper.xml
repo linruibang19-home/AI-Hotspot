@@ -17,13 +17,13 @@
                c.original_title, c.summary_zh as summary,
                c.recommendation_reason, c.original_url, c.canonical_url,
                c.fact_status, c.final_score, c.featured,
-               c.source_published_at, c.published_at
+               c.source_published_at, c.effective_published_at as published_at
         from content.content_item c
         join source.source_entity s on s.id = c.source_entity_id
         where <include refid="publicPredicate"/>
-          and c.published_at &gt;= #{startAt}
-          and c.published_at &lt; #{endAt}
-        order by c.featured desc, c.final_score desc nulls last, c.published_at desc, c.id desc
+          and c.effective_published_at &gt;= #{startAt}
+          and c.effective_published_at &lt; #{endAt}
+        order by c.featured desc, c.final_score desc nulls last, c.effective_published_at desc, c.id desc
         limit #{limit}
     </select>
 
@@ -36,8 +36,8 @@
         from content.content_item c
         left join content.content_event_relation cer on cer.content_item_id = c.id
         where <include refid="publicPredicate"/>
-          and c.published_at &gt;= #{startAt}
-          and c.published_at &lt; #{endAt}
+          and c.effective_published_at &gt;= #{startAt}
+          and c.effective_published_at &lt; #{endAt}
     </select>
 
     <select id="archiveBuckets" resultType="com.aihotspot.core.content.PublicReportMapper$ArchiveBucket">
@@ -45,11 +45,11 @@
                count(*) as story_count,
                (array_agg(title order by published_at desc, id desc))[1] as lead_title
         from (
-            select c.id, c.published_at, coalesce(c.title_zh, c.original_title) as title,
+            select c.id, c.effective_published_at as published_at, coalesce(c.title_zh, c.original_title) as title,
             <choose>
-                <when test="period == 'WEEKLY'">date_trunc('week', c.published_at at time zone 'Asia/Shanghai')</when>
-                <when test="period == 'MONTHLY'">date_trunc('month', c.published_at at time zone 'Asia/Shanghai')</when>
-                <otherwise>date_trunc('day', c.published_at at time zone 'Asia/Shanghai')</otherwise>
+                <when test="period == 'WEEKLY'">date_trunc('week', c.effective_published_at at time zone 'Asia/Shanghai')</when>
+                <when test="period == 'MONTHLY'">date_trunc('month', c.effective_published_at at time zone 'Asia/Shanghai')</when>
+                <otherwise>date_trunc('day', c.effective_published_at at time zone 'Asia/Shanghai')</otherwise>
             </choose>
             as bucket
             from content.content_item c
@@ -61,7 +61,7 @@
     </select>
 
     <select id="latestPublishedDate" resultType="java.time.LocalDate">
-        select max((c.published_at at time zone 'Asia/Shanghai')::date)
+        select max((c.effective_published_at at time zone 'Asia/Shanghai')::date)
         from content.content_item c
         where <include refid="publicPredicate"/>
     </select>
@@ -102,7 +102,7 @@
                c.content_type, coalesce(c.title_zh, c.original_title) as title,
                c.original_title, c.summary_zh as summary, c.recommendation_reason,
                c.original_url, c.canonical_url, c.fact_status, c.final_score, c.featured,
-               c.source_published_at, c.published_at
+               c.source_published_at, c.effective_published_at as published_at
         from content.report_item ri
         join content.content_item c on c.id = ri.content_item_id
         join source.source_entity s on s.id = c.source_entity_id

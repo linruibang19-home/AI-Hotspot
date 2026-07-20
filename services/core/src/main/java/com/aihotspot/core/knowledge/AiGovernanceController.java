@@ -95,7 +95,26 @@ public class AiGovernanceController {
     @GetMapping("/metrics") public Map<String,Object> metrics(){
         List<Map<String,Object>> recent=jdbc.queryForList("select capability,provider_name,model_name,status,latency_ms,input_tokens,output_tokens,estimated_cost,error_code,recorded_at from knowledge.provider_metric order by recorded_at desc limit 100");
         Map<String,Object> summary=jdbc.queryForMap("select count(*) calls,coalesce(round(avg(latency_ms)),0) avg_latency_ms,count(*) filter(where status<>'SUCCEEDED') failures,coalesce(sum(estimated_cost),0) estimated_cost from knowledge.provider_metric where recorded_at>=now()-interval '24 hours'");
-        return Map.of("summary",summary,"recent",recent);
+        Map<String,Object> rag=jdbc.queryForMap("""
+            select count(*) rag_queries,
+              count(*) filter(where answer_status='SUCCEEDED') succeeded,
+              count(*) filter(where answer_status='NO_EVIDENCE') no_evidence,
+              coalesce(round(avg(latency_ms) filter(where latency_ms is not null)),0) avg_latency_ms,
+              coalesce(round((percentile_cont(0.95) within group(order by latency_ms) filter(where latency_ms is not null))::numeric),0) p95_latency_ms,
+              coalesce(round(avg(citation_coverage)::numeric,3),0) avg_citation_coverage,
+              coalesce(round(avg((retrieval_diagnostics->>'sourceCount')::numeric),2),0) avg_source_count,
+              coalesce(round(avg((retrieval_diagnostics->>'contextCount')::numeric),2),0) avg_context_count
+            from research.query_run where created_at>=now()-interval '24 hours'
+            """);
+        Map<String,Object> index=jdbc.queryForMap("""
+            select count(distinct d.id) filter(where d.status='INDEXED') indexed_documents,
+              count(ch.id) chunks,
+              count(ch.embedding) vectorized_chunks,
+              count(distinct ch.source_entity_id) indexed_sources,
+              count(*) filter(where ch.effective_published_at is null) missing_source_time
+            from knowledge.document d left join knowledge.chunk ch on ch.document_id=d.id
+            """);
+        return Map.of("summary",summary,"rag",rag,"index",index,"recent",recent);
     }
     @GetMapping("/runtime") @SuppressWarnings("unchecked") public Map<String,Object> runtime(){
         Map<String,Object> providers=ai.get().uri("/api/v1/providers").retrieve().body(Map.class);
@@ -120,8 +139,8 @@ public class AiGovernanceController {
     @PostMapping("/evaluations/run") public Map<String,Object> evaluate(@AuthenticationPrincipal AppUserPrincipal user){
         UUID suite=jdbc.queryForObject("select id from knowledge.evaluation_suite where code='RAG_BASELINE_ZH'",UUID.class); UUID run=UUID.randomUUID();
         long mockPublic=jdbc.queryForObject("select count(*) from content.content_item where publication_status='PUBLISHED' and visibility='PUBLIC' and (provider_name is null or lower(provider_name) in ('mock','test','fixture'))",Long.class);
-        long citations=jdbc.queryForObject("select count(*) from research.citation",Long.class);
-        long supported=jdbc.queryForObject("select count(*) from research.citation where support_status='SUPPORTED'",Long.class);
+        long citations=jdbc.queryForObject("select count(*) from research.citation c join research.query_run q on q.id=c.query_run_id where q.created_at>=now()-interval '7 days'",Long.class);
+        long supported=jdbc.queryForObject("select count(*) from research.citation c join research.query_run q on q.id=c.query_run_id where q.created_at>=now()-interval '7 days' and c.support_status='SUPPORTED'",Long.class);
         long indexed=jdbc.queryForObject("select count(*) from knowledge.document where status='INDEXED'",Long.class);
         long aclLeaks=jdbc.queryForObject("""
             select count(*) from knowledge.document d join knowledge.dataset ds on ds.id=d.dataset_id
@@ -133,8 +152,15 @@ public class AiGovernanceController {
         int hits=0; double ndcgTotal=0; List<Map<String,Object>> caseResults=new java.util.ArrayList<>();
         for(Map<String,Object> test:cases){Map<String,Object> input=fromJson(String.valueOf(test.get("input_data")));Map<String,Object> expected=fromJson(String.valueOf(test.get("expected_data")));String query=String.valueOf(input.get("query"));List<String> terms=((List<?>)expected.getOrDefault("mustContainAny",List.of())).stream().map(String::valueOf).toList();List<Map<String,Object>> rows=research.evaluateRetrieval(user,query,20);int firstRelevant=0;for(int i=0;i<rows.size();i++){String text=(String.valueOf(rows.get(i).get("title"))+" "+String.valueOf(rows.get(i).get("content_text"))).toLowerCase();if(terms.stream().anyMatch(term->text.contains(term.toLowerCase()))){firstRelevant=i+1;break;}}boolean hit=firstRelevant>0;if(hit){hits++;ndcgTotal+=1.0/(Math.log(firstRelevant+1)/Math.log(2));}caseResults.add(Map.of("caseKey",test.get("case_key"),"hit",hit,"firstRelevantRank",firstRelevant,"candidates",rows.size()));}
         double recall=cases.isEmpty()?0:(double)hits/cases.size(); double ndcg=cases.isEmpty()?0:ndcgTotal/cases.size(); double citationSupport=citations==0?0:(double)supported/citations;
-        boolean passed=mockPublic==0&&aclLeaks==0&&indexed>0&&cases.size()>=10&&recall>=0.80&&ndcg>=0.70&&citationSupport>=0.95;
-        Map<String,Object> metricMap=new java.util.LinkedHashMap<>();metricMap.put("caseCount",cases.size());metricMap.put("recallAt20",recall);metricMap.put("ndcgAt10",ndcg);metricMap.put("citationSupport",citationSupport);metricMap.put("citationCount",citations);metricMap.put("indexedDocuments",indexed);metricMap.put("mockPublic",mockPublic);metricMap.put("aclLeaks",aclLeaks);metricMap.put("cases",caseResults);
+        Map<String,Object> live=jdbc.queryForMap("""
+            select count(*) filter(where answer_status='SUCCEEDED') live_queries,
+              coalesce(avg(citation_coverage) filter(where answer_status='SUCCEEDED'),0) avg_citation_coverage,
+              coalesce(avg((retrieval_diagnostics->>'sourceCount')::numeric) filter(where answer_status='SUCCEEDED'),0) avg_source_count
+            from research.query_run where created_at>=now()-interval '7 days'
+            """);
+        long liveQueries=((Number)live.get("live_queries")).longValue();double avgCoverage=((Number)live.get("avg_citation_coverage")).doubleValue();double avgSources=((Number)live.get("avg_source_count")).doubleValue();
+        boolean passed=mockPublic==0&&aclLeaks==0&&indexed>0&&cases.size()>=10&&recall>=0.80&&ndcg>=0.70&&citationSupport>=0.90&&liveQueries>0&&avgCoverage>=0.80&&avgSources>=2;
+        Map<String,Object> metricMap=new java.util.LinkedHashMap<>();metricMap.put("caseCount",cases.size());metricMap.put("recallAt20",recall);metricMap.put("ndcgAt10",ndcg);metricMap.put("citationSupport",citationSupport);metricMap.put("citationCount",citations);metricMap.put("indexedDocuments",indexed);metricMap.put("mockPublic",mockPublic);metricMap.put("aclLeaks",aclLeaks);metricMap.put("liveQueries",liveQueries);metricMap.put("avgCitationCoverage",avgCoverage);metricMap.put("avgSourceCount",avgSources);metricMap.put("cases",caseResults);
         jdbc.update("insert into knowledge.evaluation_run(id,suite_id,status,provider_snapshot,metrics,passed,started_by,completed_at) values(?,?,'SUCCEEDED',?::jsonb,?::jsonb,?,?,now())",run,suite,toJson(runtime()),toJson(metricMap),passed,user.id());
         return Map.of("runId",run,"passed",passed,"metrics",metricMap);
     }

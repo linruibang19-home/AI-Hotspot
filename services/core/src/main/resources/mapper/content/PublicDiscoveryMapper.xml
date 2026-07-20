@@ -13,7 +13,7 @@
         c.content_type, coalesce(c.title_zh, c.original_title) as title,
         c.original_title, c.summary_zh as summary, c.recommendation_reason,
         c.original_url, c.canonical_url, c.fact_status, c.final_score, c.featured,
-        c.source_published_at, c.published_at
+        c.source_published_at, c.effective_published_at as published_at
     </sql>
     <select id="search" resultType="com.aihotspot.core.content.PublicContentMapper$PublicContentView">
         select <include refid="contentColumns"/>
@@ -24,7 +24,7 @@
         <if test="sourceType != null and sourceType != ''">and c.source_type = #{sourceType}</if>
         <if test="contentType != null and contentType != ''">and c.content_type = #{contentType}</if>
         order by ts_rank_cd(c.search_tsv, websearch_to_tsquery('simple', #{query})) desc,
-                 c.published_at desc, c.id desc
+                 c.effective_published_at desc, c.id desc
         limit #{limit}
     </select>
     <select id="listTopics" resultType="com.aihotspot.core.content.PublicDiscoveryMapper$TopicView">
@@ -33,8 +33,8 @@
                count(distinct c.id) filter (where c.featured) as featured_count,
                t.updated_at
         from content.topic t
-        left join content.content_item c on <include refid="publicPredicate"/>
-          and c.search_tsv @@ websearch_to_tsquery('simple', replace(t.query_text, ' ', ' OR '))
+        left join content.content_topic ct on ct.topic_id=t.id
+        left join content.content_item c on c.id=ct.content_item_id and <include refid="publicPredicate"/>
         where t.status = 'ACTIVE'
         group by t.id
         order by t.group_code, t.sort_order, t.id
@@ -45,17 +45,20 @@
                count(distinct c.id) filter (where c.featured) as featured_count,
                t.updated_at
         from content.topic t
-        left join content.content_item c on <include refid="publicPredicate"/>
-          and c.search_tsv @@ websearch_to_tsquery('simple', replace(t.query_text, ' ', ' OR '))
+        left join content.content_topic ct on ct.topic_id=t.id
+        left join content.content_item c on c.id=ct.content_item_id and <include refid="publicPredicate"/>
         where t.status = 'ACTIVE' and t.slug = #{slug}
         group by t.id
     </select>
     <select id="listTopicContents" resultType="com.aihotspot.core.content.PublicContentMapper$PublicContentView">
         select <include refid="contentColumns"/>
-        from content.content_item c join source.source_entity s on s.id = c.source_entity_id
+        from content.content_topic ct
+        join content.topic t on t.id=ct.topic_id
+        join content.content_item c on c.id=ct.content_item_id
+        join source.source_entity s on s.id = c.source_entity_id
         where <include refid="publicPredicate"/>
-          and c.search_tsv @@ websearch_to_tsquery('simple', replace(#{queryText}, ' ', ' OR '))
-        order by c.published_at desc, c.id desc
+          and t.query_text=#{queryText}
+        order by c.effective_published_at desc, c.id desc
         limit #{limit}
     </select>
     <select id="listEvents" resultType="com.aihotspot.core.content.PublicDiscoveryMapper$EventView">
@@ -94,7 +97,7 @@
         join source.source_entity s on s.id = c.source_entity_id
         where r.event_cluster_id = #{id} and <include refid="publicPredicate"/>
         order by r.is_primary desc, c.source_official_level in ('OFFICIAL','FIRST_PARTY') desc,
-                 c.published_at desc, c.id desc
+                 c.effective_published_at desc, c.id desc
         limit #{limit}
     </select>
 </mapper>

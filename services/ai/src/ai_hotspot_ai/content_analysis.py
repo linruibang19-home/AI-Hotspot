@@ -74,6 +74,15 @@ async def analyze_content(
     positive_quality = [dimensions[key] for key in ("completeness", "clarity", "sourceEvidence", "novelty", "impact", "informationDensity")]
     quality = round(sum(positive_quality) / len(positive_quality), 2)
     quality = max(0.0, quality - dimensions["marketingPenalty"] * 0.12 - dimensions["rumorPenalty"] * 0.18)
+    # Provider scores are advisory. Thin/title-only records must not receive a
+    # high editorial score merely because the source itself is authoritative.
+    evidence_length = len(re.sub(r"\s+", "", summary))
+    if evidence_length < 80:
+        quality = max(0.0, quality - 20.0)
+    elif evidence_length < 180:
+        quality = max(0.0, quality - 10.0)
+    if _normalized(title) == _normalized(summary) or len(set(re.findall(r"[\w\u4e00-\u9fff]+", text.lower()))) < 10:
+        quality = max(0.0, quality - 12.0)
     if fact_status == "UNCONFIRMED":
         quality = max(0.0, quality - 12.0)
     authority_component = min(100.0, max(0.0, authority_score) + (5 if official_level == "OFFICIAL" else 0))
@@ -167,7 +176,14 @@ def _quality_dimensions(
 
 def _relevance(text: str, tags: list[str]) -> float:
     hits = sum(1 for term in AI_TERMS if term in text.lower())
+    # A generic news item without an explicit AI signal cannot pass admission.
+    if hits == 0:
+        return 45.0
     return round(min(100.0, 64 + hits * 7 + min(len(tags), 5) * 2), 2)
+
+
+def _normalized(value: str) -> str:
+    return re.sub(r"[^\w\u4e00-\u9fff]+", "", value.lower())
 
 
 def _entities(value: object, text: str) -> list[dict[str, object]]:

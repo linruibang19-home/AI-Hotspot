@@ -28,6 +28,14 @@ def test_sitemap_and_website_connectors_filter_and_normalize_links():
     assert [entry.title for entry in entries] == ["Model One"]
 
 
+def test_website_connector_extracts_explicit_publication_date():
+    website = b'<a href="/research/devstral">Research Devstral 2 December 9, 2025 By Mistral AI</a>'
+    entries = parse_connector("WEBSITE", website, "https://example.com", {}, 10)
+    assert entries[0].published_at is not None
+    assert entries[0].published_at.isoformat() == "2025-12-09T00:00:00+00:00"
+    assert entries[0].payload["dateSource"] == "LINK_TEXT"
+
+
 @pytest.mark.parametrize(
     ("connector", "payload", "expected_title"),
     [

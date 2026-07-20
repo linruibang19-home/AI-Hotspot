@@ -57,7 +57,7 @@ public class SubscriptionService {
           where c.publication_status='PUBLISHED' and c.visibility='PUBLIC' and c.admission_status='PASSED'
             and c.is_duplicate=false and c.fact_status<>'DEBUNKED' and c.provider_name is not null
             and lower(c.provider_name) not in ('mock','test','fixture')
-          order by c.featured desc,c.final_score desc nulls last,c.published_at desc limit ?
+          order by c.featured desc,c.final_score desc nulls last,c.effective_published_at desc limit ?
           """,max);
         if(items.isEmpty()){
             jdbc.update("update automation.subscription_run set status='SKIPPED',error_message='NO_ELIGIBLE_REAL_CONTENT',completed_at=now() where id=?",runId);
