@@ -12,16 +12,18 @@ class OpenAICompatibleGenerationProvider(GenerationProvider):
         self.model = model
 
     async def generate(self, prompt: str) -> str:
+        payload: dict[str, object] = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.1,
+        }
+        if "json" in prompt.lower() or "recommendationReason" in prompt:
+            payload["response_format"] = {"type": "json_object"}
         async with httpx.AsyncClient(timeout=45) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {self.api_key}"},
-                json={
-                    "model": self.model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.1,
-                    "response_format": {"type": "json_object"},
-                },
+                json=payload,
             )
             response.raise_for_status()
             data = response.json()

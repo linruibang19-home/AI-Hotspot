@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,11 +22,16 @@ public class ResearchService {
     private final RestClient ai;
     public ResearchService(JdbcTemplate jdbc,
             @Value("${ai-hotspot.ai-base-url}") String aiBaseUrl) {
-        this.jdbc = jdbc; this.ai = RestClient.create(aiBaseUrl);
+        this.jdbc = jdbc;
+        this.ai = RestClient.builder().baseUrl(aiBaseUrl).requestFactory(new SimpleClientHttpRequestFactory()).build();
     }
 
     public List<Map<String,Object>> sessions(UUID userId) {
         return jdbc.queryForList("select id,title,status,created_at,updated_at from research.session where user_id=? order by updated_at desc limit 30", userId);
+    }
+
+    List<Map<String,Object>> evaluateRetrieval(AppUserPrincipal user, String query, int limit) {
+        return rerank(query, retrieve(user, query, Math.max(limit, 50)), limit);
     }
 
     @Transactional
@@ -99,10 +105,14 @@ public class ResearchService {
                     )
                 )
               )
-              and (ch.search_tsv @@ websearch_to_tsquery('simple',?) or lower(ch.content_text) like '%'||lower(?)||'%')
+              and (
+                ch.search_tsv @@ websearch_to_tsquery('simple',?)
+                or lower(ch.content_text) like '%'||lower(?)||'%'
+                or (?::text is not null and ch.embedding is not null)
+              )
             order by score desc,ch.source_published_at desc nulls last,ch.id limit ?
             """.replace("__ROLES__",roles);
-        return jdbc.queryForList(sql,query,query,query,queryVector,queryVector,user.id(),query,query,limit);
+        return jdbc.queryForList(sql,query,query,query,queryVector,queryVector,user.id(),query,query,queryVector,limit);
     }
 
     @SuppressWarnings("unchecked")

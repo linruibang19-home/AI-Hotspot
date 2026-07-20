@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.ObjectMapper;
 
@@ -26,11 +27,12 @@ import tools.jackson.databind.ObjectMapper;
 @RequestMapping("/api/v1/admin/ai")
 @PreAuthorize("hasAuthority('ai-config:manage')")
 public class AiGovernanceController {
-    private final JdbcTemplate jdbc; private final KnowledgeIndexService indexer;
+    private final JdbcTemplate jdbc; private final KnowledgeIndexService indexer; private final ResearchService research;
     private final OutboxStore outbox; private final ObjectMapper objectMapper; private final RestClient ai;
-    public AiGovernanceController(JdbcTemplate jdbc,KnowledgeIndexService indexer,OutboxStore outbox,ObjectMapper objectMapper,
+    public AiGovernanceController(JdbcTemplate jdbc,KnowledgeIndexService indexer,ResearchService research,OutboxStore outbox,ObjectMapper objectMapper,
             @Value("${ai-hotspot.ai-base-url}") String aiBaseUrl){
-        this.jdbc=jdbc;this.indexer=indexer;this.outbox=outbox;this.objectMapper=objectMapper;this.ai=RestClient.create(aiBaseUrl);
+        this.jdbc=jdbc;this.indexer=indexer;this.research=research;this.outbox=outbox;this.objectMapper=objectMapper;
+        this.ai=RestClient.builder().baseUrl(aiBaseUrl).requestFactory(new SimpleClientHttpRequestFactory()).build();
     }
     @GetMapping("/configs") public List<Map<String,Object>> configs(){return jdbc.queryForList("select id,task_type,provider_name,model_name,base_url,credential_ref,status,timeout_ms,parameters::text parameters,updated_at from knowledge.provider_config order by task_type");}
     @PutMapping("/configs") public void save(@RequestBody ConfigRequest body,@AuthenticationPrincipal AppUserPrincipal user){
@@ -107,9 +109,9 @@ public class AiGovernanceController {
         boolean realGeneration=isReal(generation); boolean realEmbedding=isReal(embedding); boolean realRerank=isReal(rerank);
         boolean generationOk=false; boolean embeddingOk=false; boolean rerankOk=false;
         Map<String,Object> evidence=new java.util.LinkedHashMap<>(); evidence.put("providers",providers);
-        if(realGeneration){Map<String,Object> result=ai.post().uri("/api/v1/generate").contentType(MediaType.APPLICATION_JSON).body(Map.of("prompt","只回答：AI Hotspot Provider 正常")).retrieve().body(Map.class);generationOk=result!=null&&!String.valueOf(result.getOrDefault("text","")).isBlank();evidence.put("generation",Map.of("ok",generationOk));}
-        if(realEmbedding){Map<String,Object> result=ai.post().uri("/api/v1/embed").contentType(MediaType.APPLICATION_JSON).body(Map.of("texts",List.of("AI Hotspot 向量测试"))).retrieve().body(Map.class);List<Object> vectors=(List<Object>)(result==null?List.of():result.getOrDefault("vectors",List.of()));int dimensions=vectors.isEmpty()?0:((List<?>)vectors.get(0)).size();embeddingOk=!vectors.isEmpty()&&dimensions==1024;evidence.put("embedding",Map.of("ok",embeddingOk,"dimensions",dimensions));}
-        if(realRerank){Map<String,Object> result=ai.post().uri("/api/v1/rerank").contentType(MediaType.APPLICATION_JSON).body(Map.of("query","AI 模型","documents",List.of(Map.of("id","a","text","AI 模型发布"),Map.of("id","b","text","天气预报")),"top_n",1)).retrieve().body(Map.class);rerankOk=result!=null&&!((List<?>)result.getOrDefault("results",List.of())).isEmpty();evidence.put("rerank",Map.of("ok",rerankOk));}
+        if(realGeneration){Map<String,Object> result=ai.post().uri("/api/v1/generate").contentType(MediaType.APPLICATION_JSON).body("{\"prompt\":\"Return only a valid JSON object with a status field set to ok.\"}").retrieve().body(Map.class);generationOk=result!=null&&!String.valueOf(result.getOrDefault("text","")).isBlank();evidence.put("generation",Map.of("ok",generationOk));}
+        if(realEmbedding){Map<String,Object> result=ai.post().uri("/api/v1/embed").contentType(MediaType.APPLICATION_JSON).body("{\"texts\":[\"AI Hotspot embedding smoke test\"]}").retrieve().body(Map.class);List<Object> vectors=(List<Object>)(result==null?List.of():result.getOrDefault("vectors",List.of()));int dimensions=vectors.isEmpty()?0:((List<?>)vectors.get(0)).size();embeddingOk=!vectors.isEmpty()&&dimensions==1024;evidence.put("embedding",Map.of("ok",embeddingOk,"dimensions",dimensions));}
+        if(realRerank){Map<String,Object> result=ai.post().uri("/api/v1/rerank").contentType(MediaType.APPLICATION_JSON).body("{\"query\":\"AI model\",\"documents\":[{\"id\":\"a\",\"text\":\"AI model release\"},{\"id\":\"b\",\"text\":\"weather forecast\"}],\"top_n\":1}").retrieve().body(Map.class);rerankOk=result!=null&&!((List<?>)result.getOrDefault("results",List.of())).isEmpty();evidence.put("rerank",Map.of("ok",rerankOk));}
         boolean passed=realGeneration&&realEmbedding&&realRerank&&generationOk&&embeddingOk&&rerankOk;
         evidence.put("passed",passed); evidence.put("detail",passed?"三个真实 Provider 烟测通过":"Provider 仍为 Mock 或未完整启用");
         return evidence;
@@ -129,12 +131,7 @@ public class AiGovernanceController {
             """,Long.class);
         List<Map<String,Object>> cases=jdbc.queryForList("select case_key,input_data::text input_data,expected_data::text expected_data from knowledge.evaluation_case where suite_id=? order by case_key",suite);
         int hits=0; double ndcgTotal=0; List<Map<String,Object>> caseResults=new java.util.ArrayList<>();
-        for(Map<String,Object> test:cases){Map<String,Object> input=fromJson(String.valueOf(test.get("input_data")));Map<String,Object> expected=fromJson(String.valueOf(test.get("expected_data")));String query=String.valueOf(input.get("query"));List<String> terms=((List<?>)expected.getOrDefault("mustContainAny",List.of())).stream().map(String::valueOf).toList();List<Map<String,Object>> rows=jdbc.queryForList("""
-            select d.title,ch.content_text from knowledge.chunk ch join knowledge.document d on d.id=ch.document_id
-            join knowledge.dataset ds on ds.id=d.dataset_id where d.status='INDEXED' and ds.visibility='PUBLIC'
-              and (ch.search_tsv @@ websearch_to_tsquery('simple',?) or lower(ch.content_text) like '%'||lower(?)||'%')
-            order by ts_rank_cd(ch.search_tsv,websearch_to_tsquery('simple',?)) desc,ch.source_published_at desc nulls last limit 20
-            """,query,query,query);int firstRelevant=0;for(int i=0;i<rows.size();i++){String text=(String.valueOf(rows.get(i).get("title"))+" "+String.valueOf(rows.get(i).get("content_text"))).toLowerCase();if(terms.stream().anyMatch(term->text.contains(term.toLowerCase()))){firstRelevant=i+1;break;}}boolean hit=firstRelevant>0;if(hit){hits++;ndcgTotal+=1.0/(Math.log(firstRelevant+1)/Math.log(2));}caseResults.add(Map.of("caseKey",test.get("case_key"),"hit",hit,"firstRelevantRank",firstRelevant,"candidates",rows.size()));}
+        for(Map<String,Object> test:cases){Map<String,Object> input=fromJson(String.valueOf(test.get("input_data")));Map<String,Object> expected=fromJson(String.valueOf(test.get("expected_data")));String query=String.valueOf(input.get("query"));List<String> terms=((List<?>)expected.getOrDefault("mustContainAny",List.of())).stream().map(String::valueOf).toList();List<Map<String,Object>> rows=research.evaluateRetrieval(user,query,20);int firstRelevant=0;for(int i=0;i<rows.size();i++){String text=(String.valueOf(rows.get(i).get("title"))+" "+String.valueOf(rows.get(i).get("content_text"))).toLowerCase();if(terms.stream().anyMatch(term->text.contains(term.toLowerCase()))){firstRelevant=i+1;break;}}boolean hit=firstRelevant>0;if(hit){hits++;ndcgTotal+=1.0/(Math.log(firstRelevant+1)/Math.log(2));}caseResults.add(Map.of("caseKey",test.get("case_key"),"hit",hit,"firstRelevantRank",firstRelevant,"candidates",rows.size()));}
         double recall=cases.isEmpty()?0:(double)hits/cases.size(); double ndcg=cases.isEmpty()?0:ndcgTotal/cases.size(); double citationSupport=citations==0?0:(double)supported/citations;
         boolean passed=mockPublic==0&&aclLeaks==0&&indexed>0&&cases.size()>=10&&recall>=0.80&&ndcg>=0.70&&citationSupport>=0.95;
         Map<String,Object> metricMap=new java.util.LinkedHashMap<>();metricMap.put("caseCount",cases.size());metricMap.put("recallAt20",recall);metricMap.put("ndcgAt10",ndcg);metricMap.put("citationSupport",citationSupport);metricMap.put("citationCount",citations);metricMap.put("indexedDocuments",indexed);metricMap.put("mockPublic",mockPublic);metricMap.put("aclLeaks",aclLeaks);metricMap.put("cases",caseResults);

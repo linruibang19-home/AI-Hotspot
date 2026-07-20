@@ -113,7 +113,7 @@ services:
       RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
       RERANK_API_KEY: ${RERANK_API_KEY:-}
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:18000:8000"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

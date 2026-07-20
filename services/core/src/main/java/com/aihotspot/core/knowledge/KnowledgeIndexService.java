@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 @Service
@@ -20,7 +21,7 @@ public class KnowledgeIndexService {
     private final RestClient ai;
     public KnowledgeIndexService(JdbcTemplate jdbc, @Value("${ai-hotspot.ai-base-url}") String aiBaseUrl) {
         this.jdbc = jdbc;
-        this.ai = RestClient.create(aiBaseUrl);
+        this.ai = RestClient.builder().baseUrl(aiBaseUrl).requestFactory(new SimpleClientHttpRequestFactory()).build();
     }
 
     @Scheduled(fixedDelayString = "${ai-hotspot.knowledge.index-fixed-delay:60000}", initialDelayString = "${ai-hotspot.knowledge.index-initial-delay:30000}")
@@ -31,12 +32,27 @@ public class KnowledgeIndexService {
     public IndexResult indexBatch(int requestedLimit) {
         int limit = Math.max(1, Math.min(requestedLimit, 500));
         UUID datasetId = jdbc.queryForObject("select id from knowledge.dataset where code='PUBLIC_AI_CONTENT' and status='ACTIVE'", UUID.class);
+        jdbc.update("""
+            update knowledge.document d set status='REMOVED',updated_at=now(),last_error='SOURCE_NOT_PUBLIC'
+            from content.content_item c
+            where d.content_item_id=c.id and d.status='INDEXED'
+              and not(c.index_policy='PUBLIC_RAG' and c.admission_status='PASSED'
+                and c.publication_status='PUBLISHED' and c.visibility='PUBLIC'
+                and c.provider_name is not null and lower(c.provider_name) not in ('mock','test','fixture'))
+            """);
+        jdbc.update("""
+            update knowledge.document d set status='FAILED',updated_at=now(),last_error='MISSING_EMBEDDING'
+            where d.status='INDEXED' and exists (
+              select 1 from knowledge.chunk ch where ch.document_id=d.id and ch.embedding is null
+            )
+            """);
         List<Map<String,Object>> rows = jdbc.queryForList("""
             select c.id, coalesce(c.title_zh,c.original_title) title,
                    coalesce(c.summary_zh,c.original_title) body, c.index_policy,
                    coalesce(c.canonical_url,c.original_url) source_url, c.source_published_at
             from content.content_item c
             where c.index_policy='PUBLIC_RAG' and c.admission_status='PASSED'
+              and c.publication_status='PUBLISHED' and c.visibility='PUBLIC'
               and c.provider_name is not null and lower(c.provider_name) not in ('mock','test','fixture')
               and not exists (select 1 from knowledge.document d where d.content_item_id=c.id and d.status='INDEXED')
             order by c.processed_at nulls last, c.id limit ?
@@ -50,14 +66,20 @@ public class KnowledgeIndexService {
             UUID documentId = UUID.randomUUID();
             jdbc.update("""
                 insert into knowledge.document(id,dataset_id,content_item_id,title,index_policy,status,content_hash,indexed_at)
-                values(?,?,?,?,?,'INDEXED',?,now())
+                values(?,?,?,?,?,'PENDING',?,null)
                 on conflict(dataset_id,content_item_id) do update set title=excluded.title,index_policy=excluded.index_policy,
-                  status='INDEXED',content_hash=excluded.content_hash,indexed_at=now(),last_error=null,updated_at=now()
+                  status='PENDING',content_hash=excluded.content_hash,indexed_at=null,last_error=null,updated_at=now()
                 """, documentId, datasetId, contentId, title, row.get("index_policy"), hash);
             UUID actualDocumentId = jdbc.queryForObject("select id from knowledge.document where dataset_id=? and content_item_id=?", UUID.class, datasetId, contentId);
             jdbc.update("delete from knowledge.chunk where document_id=?", actualDocumentId);
             List<String> chunks = chunk(title + "\n" + body, 900, 120);
             EmbeddingBatch embeddingBatch = embeddings(chunks);
+            boolean complete = embeddingBatch.vectors.size() == chunks.size()
+                    && embeddingBatch.vectors.stream().allMatch(vector -> vector.size() == 1024);
+            if (!complete) {
+                jdbc.update("update knowledge.document set status='FAILED',last_error='EMBEDDING_INCOMPLETE',updated_at=now() where id=?", actualDocumentId);
+                continue;
+            }
             for (int index = 0; index < chunks.size(); index++) {
                 String text = chunks.get(index);
                 UUID chunkId = UUID.randomUUID();
@@ -65,14 +87,11 @@ public class KnowledgeIndexService {
                     insert into knowledge.chunk(id,document_id,ordinal,content_text,token_count,source_url,source_published_at)
                     values(?,?,?,?,?,?,?)
                     """, chunkId, actualDocumentId, index, text, Math.max(1, text.length() / 3), row.get("source_url"), row.get("source_published_at"));
-                if (embeddingBatch.vectors.size() > index) {
-                    List<Double> vector = embeddingBatch.vectors.get(index);
-                    if (vector.size() == 1024) {
-                        jdbc.update("update knowledge.chunk set embedding=?::vector,embedding_model=?,embedded_at=now() where id=?",
-                                vectorLiteral(vector), embeddingBatch.model, chunkId);
-                    }
-                }
+                List<Double> vector = embeddingBatch.vectors.get(index);
+                jdbc.update("update knowledge.chunk set embedding=?::vector,embedding_model=?,embedded_at=now() where id=?",
+                        vectorLiteral(vector), embeddingBatch.model, chunkId);
             }
+            jdbc.update("update knowledge.document set status='INDEXED',indexed_at=now(),last_error=null,updated_at=now() where id=?", actualDocumentId);
             indexed++;
         }
         return new IndexResult(indexed, rows.size());

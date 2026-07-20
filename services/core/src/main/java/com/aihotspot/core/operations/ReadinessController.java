@@ -9,12 +9,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 @RestController @RequestMapping("/api/v1/admin/readiness") @PreAuthorize("hasRole('ADMIN')")
 public class ReadinessController {
     private final JdbcTemplate jdbc; private final RestClient ai;
-    public ReadinessController(JdbcTemplate jdbc,@Value("${ai-hotspot.ai-base-url}") String aiBaseUrl){this.jdbc=jdbc;this.ai=RestClient.create(aiBaseUrl);}
+    public ReadinessController(JdbcTemplate jdbc,@Value("${ai-hotspot.ai-base-url}") String aiBaseUrl){this.jdbc=jdbc;this.ai=RestClient.builder().baseUrl(aiBaseUrl).requestFactory(new SimpleClientHttpRequestFactory()).build();}
     @GetMapping public Map<String,Object> check(){
         Map<String,Object> checks=new LinkedHashMap<>();
         checks.put("mockPublic",checkCount("select count(*) from content.content_item where publication_status='PUBLISHED' and visibility='PUBLIC' and (provider_name is null or lower(provider_name) in ('mock','test','fixture'))",0));

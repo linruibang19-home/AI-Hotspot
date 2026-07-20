@@ -39,13 +39,22 @@ async def test_structured_analysis_has_configurable_quality_dimensions():
     assert result.title_zh == "新型 Agent 模型发布"
     assert result.fact_status == "CONFIRMED"
     assert result.final_score == round(
-        result.relevance_score * 0.55 + result.quality_score * 0.45, 2
+        result.relevance_score * 0.34
+        + result.quality_score * 0.36
+        + 100 * 0.16
+        + result.quality_dimensions["novelty"] * 0.07
+        + result.quality_dimensions["impact"] * 0.07,
+        2,
     )
     assert set(result.quality_dimensions) == {
         "completeness",
         "clarity",
-        "sourceAuthority",
+        "sourceEvidence",
+        "novelty",
+        "impact",
         "informationDensity",
+        "marketingPenalty",
+        "rumorPenalty",
     }
 
 

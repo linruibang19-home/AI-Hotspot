@@ -43,7 +43,7 @@ Copy-Item .env.example .env
 | Nginx 统一入口 | http://localhost:8088 |
 | Web | http://localhost:3000 |
 | Core API | http://localhost:8080/api/v1/health |
-| AI API | http://localhost:8000/health |
+| AI API | http://localhost:18000/health |
 | RabbitMQ 管理 | http://localhost:15672 |
 | MinIO 控制台 | http://localhost:9001 |
 | Mailpit | http://localhost:8025 |
@@ -124,7 +124,7 @@ docker compose --env-file .env.example config --quiet
 - 普通用户开放邮箱验证码注册与登录；管理端仍只允许 ADMIN/OPERATOR 角色进入；
 - 不支持用户自带模型密钥；
 - 不使用 Kubernetes、Kafka 或 Elasticsearch；
-- 已实现 RSS/Atom、Website、Sitemap、GitHub、arXiv、Hacker News 等公开 Connector；正式目录现有 82 个 Endpoint，79 个启用，3 个因上游接口限制或已有稳定替代源而明确暂停。M0～M10 的本地功能代码和验收脚本均已交付；真实 Provider、生产 SMTP、Linux/HTTPS 和合规仍由发布门禁阻止提前宣称 Beta 就绪。
+- 已实现 RSS/Atom、Website、Sitemap、GitHub、arXiv、Hacker News 等公开 Connector；正式目录现有 82 个 Endpoint，79 个启用，3 个因上游接口限制或已有稳定替代源而明确暂停。M0～M10 的本地功能代码和验收脚本均已交付，DeepSeek Generation、SiliconFlow bge-m3 Embedding 与 bge-reranker-v2-m3 Rerank 已通过本地终验；生产 SMTP、Linux/HTTPS、异机恢复和合规仍是公开 Beta 前置项。
 
 数据库、中间件端口和 Navicat 连接方式见 [本地中间件与数据库连接指南](./AI%20Hotspot%20项目方案/10%20测试运维与质量保障/本地中间件与数据库连接指南.md)。
 

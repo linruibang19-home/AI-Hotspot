@@ -12,7 +12,7 @@ foreach ($name in $required) {
 if ($failed.Count -gt 0) { throw "未运行容器：$($failed -join ', ')" }
 $health = Invoke-RestMethod -Uri "http://127.0.0.1:8080/actuator/health" -TimeoutSec 10
 if ($health.status -ne "UP") { throw "Core API 健康检查失败" }
-$providers = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/providers" -TimeoutSec 10
+$providers = Invoke-RestMethod -Uri "http://127.0.0.1:18000/api/v1/providers" -TimeoutSec 10
 Write-Host "基础栈运行正常。Generation=$($providers.generation.provider)，Embedding=$($providers.embedding.provider)，Rerank=$($providers.rerank.provider)"
 if ($providers.generation.provider -eq "mock") {
   Write-Warning "真实 Generation Provider 尚未启用；Mock 结果会被发布门禁隔离。"

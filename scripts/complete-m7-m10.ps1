@@ -40,7 +40,7 @@ try {
 $providersReady = $false
 for ($attempt = 0; $attempt -lt 60; $attempt++) {
   try {
-    $providers = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/providers" -TimeoutSec 5
+    $providers = Invoke-RestMethod -Uri "http://127.0.0.1:18000/api/v1/providers" -TimeoutSec 5
     if ($providers.generation.provider -notin @("mock","test","fixture") -and
         $providers.embedding.provider -notin @("mock","test","fixture") -and
         $providers.rerank.provider -notin @("mock","test","fixture")) {
