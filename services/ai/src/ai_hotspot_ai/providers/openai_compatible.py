@@ -1,6 +1,6 @@
 import httpx
 
-from .base import GenerationProvider
+from .base import GenerationOutput, GenerationProvider
 
 
 class OpenAICompatibleGenerationProvider(GenerationProvider):
@@ -12,6 +12,11 @@ class OpenAICompatibleGenerationProvider(GenerationProvider):
         self.model = model
 
     async def generate(self, prompt: str, max_tokens: int | None = None) -> str:
+        return (await self.generate_with_usage(prompt, max_tokens)).text
+
+    async def generate_with_usage(
+        self, prompt: str, max_tokens: int | None = None
+    ) -> GenerationOutput:
         payload: dict[str, object] = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
@@ -29,4 +34,17 @@ class OpenAICompatibleGenerationProvider(GenerationProvider):
             )
             response.raise_for_status()
             data = response.json()
-            return str(data["choices"][0]["message"]["content"])
+            usage = data.get("usage") or {}
+            return GenerationOutput(
+                text=str(data["choices"][0]["message"]["content"]),
+                input_tokens=_token_count(usage, "prompt_tokens", "input_tokens"),
+                output_tokens=_token_count(usage, "completion_tokens", "output_tokens"),
+            )
+
+
+def _token_count(usage: dict[str, object], *names: str) -> int | None:
+    for name in names:
+        value = usage.get(name)
+        if isinstance(value, int) and value >= 0:
+            return value
+    return None

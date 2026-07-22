@@ -29,6 +29,8 @@ async def test_mock_provider_flow_is_deterministic() -> None:
     assert first["vectors"] == second["vectors"]
     assert len(first["vectors"][0]) == 16
     assert generated["text"].startswith("[Mock Provider]")
+    assert "input_tokens" in generated
+    assert "output_tokens" in generated
 
 
 async def test_mock_rerank_orders_by_overlap() -> None:

@@ -8,12 +8,24 @@ class RankedDocument:
     score: float
 
 
+@dataclass(frozen=True, slots=True)
+class GenerationOutput:
+    text: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
 class GenerationProvider(ABC):
     name: str
     model: str
 
     @abstractmethod
     async def generate(self, prompt: str, max_tokens: int | None = None) -> str: ...
+
+    async def generate_with_usage(
+        self, prompt: str, max_tokens: int | None = None
+    ) -> GenerationOutput:
+        return GenerationOutput(text=await self.generate(prompt, max_tokens))
 
 
 class EmbeddingProvider(ABC):

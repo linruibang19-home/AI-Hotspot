@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -77,6 +78,7 @@ public class ResearchService {
         if (evidence.isEmpty()) {
             String noEvidence = "当前有权知识库在指定时间和来源范围内没有足够证据回答该问题。";
             stageTimings.put("total",Duration.between(started,Instant.now()).toMillis()); diagnostics=diagnostics(plan,candidates,reranked,evidence,stageTimings);
+            diagnostics.put("noEvidenceReason",noEvidenceReason(plan,candidates,reranked));
             jdbc.update("update research.query_run set answer_status='NO_EVIDENCE',answer=?,candidate_count=0,citation_count=0,latency_ms=?,retrieval_diagnostics=?::jsonb,completed_at=now() where id=?",
                     noEvidence, Duration.between(started,Instant.now()).toMillis(), json(diagnostics), runId);
             return new ResearchResult(runId,sessionId,noEvidence,"NO_EVIDENCE","none",List.of(),Duration.between(started,Instant.now()).toMillis(),diagnostics);
@@ -85,9 +87,12 @@ public class ResearchService {
         Provider provider = provider();
         stageStarted=System.nanoTime();
         GenerationResult generated = provider.real ? generate(normalized, plan, evidence)
-                : new GenerationResult(extractiveAnswer(evidence),Map.of());
+                : new GenerationResult(extractiveAnswer(evidence),Map.of(),0,0,false,null);
         String answer = normalizeGeneratedAnswer(generated.answer());
-        stageTimings.put("generation",elapsedMillis(stageStarted)); stageStarted=System.nanoTime();
+        long generationMs=elapsedMillis(stageStarted);
+        stageTimings.put("generation",generationMs);
+        if (provider.real) recordGenerationMetric(provider,generated,generationMs);
+        stageStarted=System.nanoTime();
         double coverage = citationCoverage(answer);
         stageTimings.put("citationValidation",elapsedMillis(stageStarted));
         long repairStarted=System.nanoTime();
@@ -117,11 +122,11 @@ public class ResearchService {
         diagnostics.put("citationCoverage",coverage);
         diagnostics.put("referencedCitations",referenced.size());
         diagnostics.put("citationFallbackApplied",citationFallbackApplied);
+        diagnostics.put("generationFallbackApplied",generated.failed());
         diagnostics.put("evidenceStanceCounts",EvidenceAssessmentPolicy.stanceCounts(referencedAssessments));
         diagnostics.put("conflictDetected",disclosure.conflictDetected());
         jdbc.update("update research.query_run set answer_status='SUCCEEDED',answer=?,generation_provider=?,generation_model=?,candidate_count=?,citation_count=?,latency_ms=?,retrieval_diagnostics=?::jsonb,citation_coverage=?,completed_at=now() where id=?",
                 answer,provider.name,provider.model,candidates.size(),citations.size(),latency,json(diagnostics),coverage,runId);
-        jdbc.update("insert into knowledge.provider_metric(capability,provider_name,model_name,status,latency_ms) values('RAG',?,?, 'SUCCEEDED',?)",provider.name,provider.model,latency);
         jdbc.update("update research.session set updated_at=now() where id=?",sessionId);
         return new ResearchResult(runId,sessionId,answer,"SUCCEEDED",provider.name,citations,latency,diagnostics);
     }
@@ -258,11 +263,18 @@ public class ResearchService {
             4. 只有证据明确否认或与该主张矛盾时才用 REFUTES；缺少独立确认或 fact_status=UNCONFIRMED 时用 UNVERIFIED；其余用 SUPPORTS；
             5. 证据不足必须明确说明，不把单一媒体观点写成共识；6. answer 使用简洁中文纯文本，不使用 Markdown 标记。
             """+"\n问题："+question+"\n时间范围："+(plan.days()>0?"最近"+plan.days()+"天":"不限")+"\n证据：\n"+context;
-        try{Map<String,Object> response=ai.post().uri("/api/v1/generate").contentType(MediaType.APPLICATION_JSON).body(Map.of("prompt",prompt,"max_tokens",650)).retrieve().body(Map.class);return parseGeneration(String.valueOf(response.get("text")));}catch(Exception ignored){return new GenerationResult(extractiveAnswer(evidence),Map.of());}
+        try{
+            Map<String,Object> response=ai.post().uri("/api/v1/generate").contentType(MediaType.APPLICATION_JSON).body(Map.of("prompt",prompt,"max_tokens",650)).retrieve().body(Map.class);
+            GenerationResult parsed=parseGeneration(String.valueOf(response.get("text")));
+            return new GenerationResult(parsed.answer(),parsed.assessments(),number(response.get("input_tokens")),
+                    number(response.get("output_tokens")),false,null);
+        }catch(Exception error){
+            return new GenerationResult(extractiveAnswer(evidence),Map.of(),0,0,true,error.getClass().getSimpleName());
+        }
     }
 
     @SuppressWarnings("unchecked") private GenerationResult parseGeneration(String raw){
-        if(raw==null||raw.isBlank())return new GenerationResult("",Map.of());
+        if(raw==null||raw.isBlank())return new GenerationResult("",Map.of(),0,0,false,null);
         String normalized=raw.strip().replaceFirst("^```(?:json)?\\s*","").replaceFirst("\\s*```$","");
         try{
             Map<String,Object> parsed=new ObjectMapper().readValue(normalized,Map.class);
@@ -275,8 +287,35 @@ public class ResearchService {
                         text(item.get("claimText"),""),text(item.get("stance"),"SUPPORTS"),
                         text(item.get("reason"),"")));
             }
-            return new GenerationResult(answer,assessments);
-        }catch(Exception ignored){return new GenerationResult(raw,Map.of());}
+            return new GenerationResult(answer,assessments,0,0,false,null);
+        }catch(Exception ignored){return new GenerationResult(raw,Map.of(),0,0,false,null);}
+    }
+
+    private void recordGenerationMetric(Provider provider,GenerationResult generated,long latencyMs){
+        BigDecimal cost=estimatedGenerationCost(generated.inputTokens(),generated.outputTokens());
+        jdbc.update("insert into knowledge.provider_metric(capability,provider_name,model_name,status,latency_ms,input_tokens,output_tokens,estimated_cost,error_code) values('RAG_GENERATION',?,?,?,?,?,?,?,?)",
+                provider.name(),provider.model(),generated.failed()?"FAILED":"SUCCEEDED",latencyMs,
+                generated.inputTokens(),generated.outputTokens(),cost,generated.errorCode());
+    }
+
+    @SuppressWarnings("unchecked")
+    private BigDecimal estimatedGenerationCost(int inputTokens,int outputTokens){
+        try{
+            String raw=jdbc.queryForObject("select parameters::text from knowledge.provider_config where task_type='RAG_GENERATION'",String.class);
+            Map<String,Object> parameters=new ObjectMapper().readValue(raw==null?"{}":raw,Map.class);
+            double inputRate=decimal(parameters.get("inputCostPerMillion"));
+            double outputRate=decimal(parameters.get("outputCostPerMillion"));
+            return BigDecimal.valueOf((inputTokens*inputRate+outputTokens*outputRate)/1_000_000d);
+        }catch(Exception ignored){return BigDecimal.ZERO;}
+    }
+
+    private static String noEvidenceReason(QueryPlan plan,List<Map<String,Object>> candidates,List<Map<String,Object>> reranked){
+        if(candidates.isEmpty()&&plan.officialOnly())return "OFFICIAL_SCOPE_NO_MATCH";
+        if(candidates.isEmpty()&&plan.days()>0)return "TIME_RANGE_NO_MATCH";
+        if(candidates.isEmpty()&&plan.sourceType()!=null)return "SOURCE_TYPE_NO_MATCH";
+        if(candidates.isEmpty())return "NO_RELEVANT_CHUNK";
+        if(reranked.isEmpty())return "RERANK_NO_RELEVANT";
+        return "DIVERSITY_FILTERED";
     }
 
     private String extractiveAnswer(List<Map<String,Object>> evidence){StringBuilder answer=new StringBuilder("根据当前可访问证据，值得关注的变化如下 [1]：\n\n");for(int i=0;i<Math.min(6,evidence.size());i++){Map<String,Object> row=evidence.get(i);String text=String.valueOf(row.get("content_text")).replaceFirst("^标题：[^\\n]*\\s*原文证据：\\s*","").replaceAll("[。！？!?]+","；").replaceAll("\\s+"," ").strip();String title=String.valueOf(row.get("title"));String source=String.valueOf(row.get("source_name"));answer.append("- ").append(title).append("（").append(source).append("）：").append(text,0,Math.min(180,text.length())).append(text.length()>180?"…":"").append(" [").append(i+1).append("]\n");}return answer.toString();}
@@ -312,11 +351,13 @@ public class ResearchService {
     private static String normalizeGeneratedAnswer(String answer){if(answer==null)return "";return answer.strip().replaceFirst("^(?:\\[(?:C)?\\d+]\\s*[。；;，,]?\\s*)+(?=\\S)","");}
     private static boolean isMock(Object value){return List.of("mock","test","fixture").contains(String.valueOf(value).toLowerCase());}
     private static int number(Object value){if(value instanceof Number number)return number.intValue();try{return Integer.parseInt(String.valueOf(value));}catch(Exception ignored){return 0;}}
+    private static double decimal(Object value){if(value instanceof Number number)return number.doubleValue();try{return Double.parseDouble(String.valueOf(value));}catch(Exception ignored){return 0;}}
     private static String text(Object value,String fallback){return value==null?fallback:String.valueOf(value);}
     private static String blankToNull(Object value){String text=value==null?"":String.valueOf(value).strip();return text.isBlank()?null:text;}
     private static String json(Object value){try{return new ObjectMapper().writeValueAsString(value);}catch(Exception ignored){return "{}";}}
     private record Provider(String name,String model,boolean real){}
-    private record GenerationResult(String answer,Map<Integer,EvidenceAssessmentPolicy.ModelAssessment> assessments){}
+    private record GenerationResult(String answer,Map<Integer,EvidenceAssessmentPolicy.ModelAssessment> assessments,
+                                    int inputTokens,int outputTokens,boolean failed,String errorCode){}
     private record RetrievalResult(List<Map<String,Object>> rows,long embeddingMs,long databaseMs){}
     private record QueryPlan(String lexicalQuery,String semanticQuery,OffsetDateTime cutoff,int days,boolean officialOnly,String sourceType){Map<String,Object> asMap(){Map<String,Object> map=new LinkedHashMap<>();map.put("lexicalQuery",lexicalQuery);map.put("timeRangeDays",days);map.put("cutoff",cutoff==null?null:cutoff.toString());map.put("officialOnly",officialOnly);map.put("sourceType",sourceType);return map;}}
     public record Citation(int citationNo,String title,String sourceName,String sourceUrl,String quote,double supportScore,

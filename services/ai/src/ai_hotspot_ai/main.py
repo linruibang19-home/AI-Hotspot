@@ -88,10 +88,13 @@ async def providers(request: Request):
 @app.post("/api/v1/mock/generate", response_model=GenerateResponse, include_in_schema=False)
 async def generate(payload: GenerateRequest, request: Request):
     provider = _providers(request).generation
+    output = await provider.generate_with_usage(payload.prompt, payload.max_tokens)
     return GenerateResponse(
-        text=await provider.generate(payload.prompt, payload.max_tokens),
+        text=output.text,
         provider=provider.name,
         model=provider.model,
+        input_tokens=output.input_tokens,
+        output_tokens=output.output_tokens,
     )
 
 
