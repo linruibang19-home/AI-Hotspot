@@ -469,7 +469,8 @@ def load_content(payload: dict[str, object]) -> ContentContext:
                    r.raw_summary as summary, s.name as source_name,
                    c.source_official_level, c.display_policy, c.index_policy, e.config,
                    c.canonical_url, c.source_published_at,
-                   s.authority_score::float as authority_score
+                   (coalesce(e.authority_override, s.authority_score) * e.quality_weight)::float
+                       as authority_score
             from content.content_item c
             join source.raw_entry r on r.id = c.raw_entry_id
             join source.source_entity s on s.id = c.source_entity_id

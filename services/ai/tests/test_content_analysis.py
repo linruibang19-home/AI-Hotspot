@@ -82,7 +82,12 @@ async def test_thin_non_ai_item_cannot_pass_quality_or_relevance():
 
 def test_openai_compatible_requires_external_configuration():
     try:
-        build_provider_registry(Settings(generation_provider="openai-compatible"))
+        build_provider_registry(Settings(
+            _env_file=None,
+            generation_provider="openai-compatible",
+            generation_base_url=None,
+            generation_api_key=None,
+        ))
     except RuntimeError as error:
         assert "GENERATION_BASE_URL" in str(error)
     else:

@@ -30,9 +30,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class SourceAdminController {
 
     private final SourceService service;
+    private final SourceQualityService qualityService;
 
-    public SourceAdminController(SourceService service) {
+    public SourceAdminController(SourceService service, SourceQualityService qualityService) {
         this.service = service;
+        this.qualityService = qualityService;
     }
 
     @GetMapping
@@ -51,6 +53,22 @@ public class SourceAdminController {
     @GetMapping("/connector-schemas")
     @PreAuthorize("hasAuthority('source:read')")
     public Map<String, Object> connectorSchemas() { return service.connectorSchemas(); }
+
+    @GetMapping("/quality")
+    @PreAuthorize("hasAuthority('source:read')")
+    public Map<String, Object> quality() { return qualityService.currentReport(); }
+
+    @GetMapping("/quality/history")
+    @PreAuthorize("hasAuthority('source:read')")
+    public List<Map<String, Object>> qualityHistory(@RequestParam(defaultValue = "8") int weeks) {
+        return qualityService.history(weeks);
+    }
+
+    @PostMapping("/quality/run")
+    @PreAuthorize("hasAuthority('source:write')")
+    public SourceQualityService.RunResult runQualityReport() {
+        return qualityService.captureWeeklySnapshot();
+    }
 
     @PostMapping
     @PreAuthorize("hasAuthority('source:write')")

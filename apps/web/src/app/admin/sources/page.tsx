@@ -17,6 +17,17 @@ type SourceResponse = {
   metrics: { totalEndpoints: number; activeEndpoints: number; healthyEndpoints: number; attentionEndpoints: number; productionEndpoints: number; testEndpoints: number };
   items: SourceItem[];
 };
+type QualityEndpoint = {
+  endpoint_id: string; source_name: string; endpoint_name: string; official_level: string;
+  item_count: number; published_count: number; duplicate_rate: number;
+  source_time_completeness: number; published_source_share: number;
+  quality_score?: number; assessment: string; quality_weight: number; quality_state: string;
+};
+type QualityReport = {
+  summary: { endpoint_count: number; healthy_count: number; watch_count: number; underperforming_count: number;
+    insufficient_data_count: number; duplicate_rate: number; source_time_completeness: number; largest_source_share: number };
+  endpoints: QualityEndpoint[];
+};
 
 const EMPTY: SourceResponse = { metrics: { totalEndpoints: 0, activeEndpoints: 0, healthyEndpoints: 0, attentionEndpoints: 0, productionEndpoints: 0, testEndpoints: 0 }, items: [] };
 
@@ -31,12 +42,19 @@ export default function AdminSourcesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState("");
+  const [quality, setQuality] = useState<QualityReport | null>(null);
+  const [qualityBusy, setQualityBusy] = useState(false);
 
   const load = useCallback(async (search = "") => {
     setLoading(true);
     setError("");
     try {
-      setData(await apiFetch<SourceResponse>(`/admin/sources?limit=100${search ? `&query=${encodeURIComponent(search)}` : ""}`));
+      const [sources, report] = await Promise.all([
+        apiFetch<SourceResponse>(`/admin/sources?limit=100${search ? `&query=${encodeURIComponent(search)}` : ""}`),
+        apiFetch<QualityReport>("/admin/sources/quality"),
+      ]);
+      setData(sources);
+      setQuality(report);
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : "无法加载信源");
     } finally {
@@ -94,6 +112,19 @@ export default function AdminSourcesPage() {
     }
   }
 
+  async function captureQualityReport() {
+    setQualityBusy(true); setError(""); setNotice("");
+    try {
+      const result = await apiFetch<{ snapshots: number; downranked: number; paused: number }>("/admin/sources/quality/run", { method: "POST" });
+      setNotice(`周度质量快照已更新：${result.snapshots} 个 Endpoint，降权 ${result.downranked}，暂停 ${result.paused}`);
+      await load(query);
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : "生成质量周报失败");
+    } finally {
+      setQualityBusy(false);
+    }
+  }
+
   const allowed = user?.roles.some((role) => role === "ADMIN" || role === "OPERATOR");
   const visibleItems = useMemo(() => data.items.filter((item) => {
     const catalogMatches = catalogKind === "ALL" || item.catalogKind === catalogKind;
@@ -106,10 +137,15 @@ export default function AdminSourcesPage() {
 
   return (
     <div className="page-shell">
-      <PageHeader title="信源管理" description="统一维护 SourceEntity、Endpoint、采集策略、权威分与正文展示政策。" action={<button className="button primary" type="button" onClick={() => setDialogOpen(true)}>＋ 新增信源</button>} />
+      <PageHeader title="信源管理" description="统一维护 SourceEntity、Endpoint、采集策略、权威分与正文展示政策。" action={<div className="header-actions"><button className="button" disabled={qualityBusy} type="button" onClick={() => void captureQualityReport()}>{qualityBusy ? "统计中…" : "生成质量周报"}</button><button className="button primary" type="button" onClick={() => setDialogOpen(true)}>＋ 新增信源</button></div>} />
       <section className="metric-grid" aria-label="信源概览">
         {[[data.metrics.productionEndpoints, "正式目录"], [data.metrics.activeEndpoints, "已启用"], [data.metrics.healthyEndpoints, "健康运行"], [data.metrics.testEndpoints, "测试记录"]].map(([value, label]) => <div className="metric-card" key={label}><strong>{value}</strong><span>{label}</span></div>)}
       </section>
+      {quality ? <section className="product-panel" aria-label="最近七天信源质量">
+        <header><div><span className="overline">SOURCE QUALITY · 7D</span><h2>质量、多样性与时间完整率</h2></div><span className={`status-badge ${quality.summary.underperforming_count ? "warning" : "active"}`}>{quality.summary.underperforming_count} 个低质 Endpoint</span></header>
+        <div className="metric-grid"><article><strong>{Math.round(quality.summary.source_time_completeness * 100)}%</strong><span>发布时间完整率</span></article><article><strong>{Math.round(quality.summary.duplicate_rate * 100)}%</strong><span>重复率</span></article><article><strong>{Math.round(quality.summary.largest_source_share * 100)}%</strong><span>最大单源占比</span></article><article><strong>{quality.summary.healthy_count}/{quality.summary.endpoint_count}</strong><span>健康 / 全部 Endpoint</span></article></div>
+        <div className="data-table"><div className="data-row head"><span>信源</span><span>质量与状态</span><span>完整率 / 重复率</span><span>公开与份额</span></div>{quality.endpoints.slice(0, 20).map((item) => <div className="data-row" key={item.endpoint_id}><span><strong>{item.source_name}</strong><small>{item.endpoint_name} · {item.official_level}</small></span><span><i className={`status-badge ${item.assessment === "HEALTHY" ? "active" : item.assessment === "UNDERPERFORMING" ? "failed" : "warning"}`}>{item.assessment}</i><small>质量 {item.quality_score?.toFixed(1) ?? "样本不足"} · 权重 {item.quality_weight}</small></span><span>{Math.round(item.source_time_completeness * 100)}%<small>重复 {Math.round(item.duplicate_rate * 100)}%</small></span><span>{item.published_count}/{item.item_count}<small>公开份额 {Math.round(item.published_source_share * 100)}%</small></span></div>)}</div>
+      </section> : null}
       <form className="admin-toolbar" onSubmit={(event) => { event.preventDefault(); void load(query); }}>
         <div className="tabs" aria-label="信源目录筛选">{[["PRODUCTION", "正式目录"], ["USER_MANAGED", "用户添加"], ["TEST", "测试数据"], ["ALL", "全部"]].map(([value, label]) => <button className={`tab ${catalogKind === value ? "active" : ""}`} type="button" key={value} onClick={() => setCatalogKind(value as typeof catalogKind)}>{label}</button>)}</div>
         <select aria-label="Connector 类型" value={connectorType} onChange={(event) => setConnectorType(event.target.value)}><option value="ALL">全部 Connector</option><option value="FEED">RSS / Atom</option><option value="WEBSITE">Website</option><option value="SITEMAP">Sitemap</option><option value="GITHUB">GitHub</option><option value="HUGGING_FACE">Hugging Face</option><option value="ARXIV">arXiv</option><option value="OPENREVIEW">OpenReview</option><option value="HACKER_NEWS">Hacker News</option></select>

@@ -115,7 +115,8 @@ public class ResearchService {
             with eligible as (
               select ch.id chunk_id,ch.content_text,ch.source_url,d.title,s.name source_name,
                 ch.source_entity_id,ch.event_cluster_id,ch.source_official_level,ch.effective_published_at,
-                coalesce(ch.authority_score,0) authority_score,coalesce(ch.quality_score,0) quality_score,
+                coalesce(ch.authority_score,0) * coalesce(se.quality_weight,1) authority_score,
+                coalesce(ch.quality_score,0) quality_score,
                 coalesce(ch.final_score,0) final_score,
                 case when ch.search_tsv @@ websearch_to_tsquery('simple',?)
                      then ts_rank_cd(ch.search_tsv,websearch_to_tsquery('simple',?)) else 0 end
@@ -125,6 +126,7 @@ public class ResearchService {
               from knowledge.chunk ch join knowledge.document d on d.id=ch.document_id
               join knowledge.dataset ds on ds.id=d.dataset_id
               left join content.content_item ci on ci.id=d.content_item_id
+              left join source.source_endpoint se on se.id=ci.endpoint_id
               left join source.source_entity s on s.id=ch.source_entity_id
               where d.status='INDEXED' and (
                 ds.visibility='PUBLIC' or exists(select 1 from knowledge.dataset_acl acl
