@@ -18,6 +18,10 @@ const sourceFilters: Array<[SourceFilter, string]> = [
   ["ALL", "全部"], ["OFFICIAL", "一手信源"], ["MEDIA", "资讯"], ["RESEARCH", "论文"], ["COMMUNITY", "社区"],
 ];
 
+const shanghaiDateKeyFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+});
+
 export function PublicFeed({
   items,
   nextCursor: initialNextCursor = null,
@@ -122,7 +126,7 @@ export function PublicFeed({
         const panelId = `date-feed-${date.key}`;
         return <section className={`date-section ${collapsed ? "collapsed" : ""}`} key={date.key} aria-label={`${date.label}公开内容`}>
           <button className="date-heading" type="button" aria-expanded={!collapsed} aria-controls={panelId} onClick={() => toggleDate(date.key)}>
-            <strong>{date.label}</strong><span className="date-chevron" aria-hidden="true">⌄</span><small>{date.weekday} · {dateItems.length} 条</small><span className="date-toggle-label">{collapsed ? "展开" : "收起"}</span>
+            <strong>{date.label}</strong><span className="date-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 9 5 5 5-5" /></svg></span><small>{date.weekday} · {dateItems.length} 条</small><span className="date-toggle-label">{collapsed ? "展开" : "收起"}</span>
           </button>
           {!collapsed ? <div className="timeline" id={panelId}>
             {dateItems.map((item) => (
@@ -163,7 +167,7 @@ function matchesSource(item: PublicContent, filter: SourceFilter) {
 function groupByDate(items: PublicContent[]): Array<[{ key: string; label: string; weekday: string }, PublicContent[]]> {
   const groups = new Map<string, PublicContent[]>();
   for (const item of items) {
-    const key = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(item.publishedAt));
+    const key = shanghaiDateKeyFormatter.format(new Date(item.publishedAt));
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
   return [...groups.entries()].map(([key, dateItems]) => {

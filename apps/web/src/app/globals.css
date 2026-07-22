@@ -1666,8 +1666,19 @@ a {
 .date-heading strong { font-size: 18px; }
 .date-heading > span { color: var(--muted); font-size: 12px; }
 .date-heading small { margin-left: 0; }
-.date-heading .date-chevron { display: inline-block; font-size: 16px; transition: transform 160ms ease; }
-.date-section.collapsed .date-chevron { transform: rotate(-90deg); }
+.date-heading .date-chevron {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  place-items: center;
+  border: 1px solid #cbd9dd;
+  border-radius: 50%;
+  background: var(--panel);
+  line-height: 0;
+}
+.date-chevron svg { display: block; width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 160ms ease; }
+.date-section.collapsed .date-chevron svg { transform: rotate(-90deg); }
 .date-toggle-label { margin-left: 3px; opacity: 0; font-size: 11px !important; transition: opacity 150ms ease; }
 .date-heading:hover .date-toggle-label, .date-heading:focus-visible .date-toggle-label { opacity: 1; }
 .date-section.collapsed .date-heading { margin-bottom: 0; }

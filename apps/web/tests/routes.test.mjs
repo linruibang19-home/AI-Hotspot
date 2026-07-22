@@ -215,11 +215,13 @@ test("M6 search, server favorites and report editorial are real API flows", () =
   assert.match(editor, /\/publish/);
 });
 
-test("public feeds use cursor pagination instead of hydrating fifty cards", () => {
+test("public feeds preserve cursor pagination while spanning daily groups", () => {
   const api = readFileSync("src/lib/public-content.ts", "utf8");
   const feed = readFileSync("src/components/public-feed.tsx", "utf8");
   const card = readFileSync("src/components/public-content-card.tsx", "utf8");
-  assert.match(api, /const limit = featured \? 12 : 20/);
+  assert.match(api, /INITIAL_DATE_GROUPS = 2/);
+  assert.match(api, /const limit = featured \? 12 : 50/);
+  assert.match(api, /countDateGroups\(items\)/);
   assert.match(feed, /加载更多内容/);
   assert.match(feed, /nextCursor/);
   assert.match(card, /truncateSummary/);
