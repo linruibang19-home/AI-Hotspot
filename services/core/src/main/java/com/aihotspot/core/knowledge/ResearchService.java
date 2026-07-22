@@ -43,7 +43,11 @@ public class ResearchService {
     }
 
     List<Map<String,Object>> evaluateRetrieval(AppUserPrincipal user, String query, int limit) {
-        QueryPlan plan = plan(query, Map.of());
+        return evaluateRetrieval(user, query, Map.of(), limit);
+    }
+
+    List<Map<String,Object>> evaluateRetrieval(AppUserPrincipal user, String query, Map<String,Object> filters, int limit) {
+        QueryPlan plan = plan(query, filters == null ? Map.of() : filters);
         return diversify(rerank(query, retrieve(user, plan, Math.max(limit * 4, 80)), Math.max(limit * 2, 40)), limit);
     }
 
@@ -114,6 +118,7 @@ public class ResearchService {
         String sql="""
             with eligible as (
               select ch.id chunk_id,ch.content_text,ch.source_url,d.title,s.name source_name,
+                ds.visibility dataset_visibility,ci.visibility content_visibility,ci.publication_status,
                 ch.source_entity_id,ch.event_cluster_id,ch.source_official_level,ch.effective_published_at,
                 coalesce(ch.authority_score,0) * coalesce(se.quality_weight,1) authority_score,
                 coalesce(ch.quality_score,0) quality_score,

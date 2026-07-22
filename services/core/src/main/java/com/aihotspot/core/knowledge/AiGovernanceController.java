@@ -137,7 +137,8 @@ public class AiGovernanceController {
     }
     @GetMapping("/evaluations") public List<Map<String,Object>> evaluations(){return jdbc.queryForList("select er.id,es.name,es.capability,er.status,er.metrics::text metrics,er.passed,er.started_at,er.completed_at from knowledge.evaluation_run er join knowledge.evaluation_suite es on es.id=er.suite_id order by er.started_at desc limit 30");}
     @PostMapping("/evaluations/run") public Map<String,Object> evaluate(@AuthenticationPrincipal AppUserPrincipal user){
-        UUID suite=jdbc.queryForObject("select id from knowledge.evaluation_suite where code='RAG_BASELINE_ZH'",UUID.class); UUID run=UUID.randomUUID();
+        Map<String,Object> suiteRow=jdbc.queryForMap("select id,thresholds::text thresholds from knowledge.evaluation_suite where code='RAG_BASELINE_ZH'");
+        UUID suite=(UUID)suiteRow.get("id"); Map<String,Object> thresholds=fromJson(String.valueOf(suiteRow.get("thresholds"))); UUID run=UUID.randomUUID();
         long mockPublic=jdbc.queryForObject("select count(*) from content.content_item where publication_status='PUBLISHED' and visibility='PUBLIC' and (provider_name is null or lower(provider_name) in ('mock','test','fixture'))",Long.class);
         long citations=jdbc.queryForObject("select count(*) from research.citation c join research.query_run q on q.id=c.query_run_id where q.created_at>=now()-interval '7 days' and c.support_status in ('SUPPORTED','UNSUPPORTED')",Long.class);
         long supported=jdbc.queryForObject("select count(*) from research.citation c join research.query_run q on q.id=c.query_run_id where q.created_at>=now()-interval '7 days' and c.support_status='SUPPORTED'",Long.class);
@@ -150,7 +151,13 @@ public class AiGovernanceController {
             """,Long.class);
         List<Map<String,Object>> cases=jdbc.queryForList("select case_key,input_data::text input_data,expected_data::text expected_data from knowledge.evaluation_case where suite_id=? order by case_key",suite);
         int hits=0; double ndcgTotal=0; List<Map<String,Object>> caseResults=new java.util.ArrayList<>();
-        for(Map<String,Object> test:cases){Map<String,Object> input=fromJson(String.valueOf(test.get("input_data")));Map<String,Object> expected=fromJson(String.valueOf(test.get("expected_data")));String query=String.valueOf(input.get("query"));List<String> terms=((List<?>)expected.getOrDefault("mustContainAny",List.of())).stream().map(String::valueOf).toList();List<Map<String,Object>> rows=research.evaluateRetrieval(user,query,20);int firstRelevant=0;for(int i=0;i<rows.size();i++){String text=(String.valueOf(rows.get(i).get("title"))+" "+String.valueOf(rows.get(i).get("content_text"))).toLowerCase();if(terms.stream().anyMatch(term->text.contains(term.toLowerCase()))){firstRelevant=i+1;break;}}boolean hit=firstRelevant>0;if(hit){hits++;ndcgTotal+=1.0/(Math.log(firstRelevant+1)/Math.log(2));}caseResults.add(Map.of("caseKey",test.get("case_key"),"hit",hit,"firstRelevantRank",firstRelevant,"candidates",rows.size()));}
+        for(Map<String,Object> test:cases){
+            Map<String,Object> input=fromJson(String.valueOf(test.get("input_data"))); Map<String,Object> expected=fromJson(String.valueOf(test.get("expected_data")));
+            String query=String.valueOf(input.get("query")); int topK=Math.max(1,Math.min(number(input.get("topK"),20),50));
+            Map<String,Object> filters=input.get("filters") instanceof Map<?,?> raw?raw.entrySet().stream().collect(java.util.stream.Collectors.toMap(entry->String.valueOf(entry.getKey()),Map.Entry::getValue)):Map.of();
+            List<Map<String,Object>> rows=research.evaluateRetrieval(user,query,filters,topK); RagEvaluationScorer.CaseScore score=RagEvaluationScorer.score(expected,rows);
+            if(score.passed())hits++; ndcgTotal+=score.ndcgGain(); caseResults.add(score.asMap(String.valueOf(test.get("case_key")),rows.size()));
+        }
         double recall=cases.isEmpty()?0:(double)hits/cases.size(); double ndcg=cases.isEmpty()?0:ndcgTotal/cases.size(); double citationSupport=citations==0?0:(double)supported/citations;
         Map<String,Object> live=jdbc.queryForMap("""
             select count(*) filter(where answer_status='SUCCEEDED') live_queries,
@@ -159,13 +166,16 @@ public class AiGovernanceController {
             from research.query_run where created_at>=now()-interval '7 days'
             """);
         long liveQueries=((Number)live.get("live_queries")).longValue();double avgCoverage=((Number)live.get("avg_citation_coverage")).doubleValue();double avgSources=((Number)live.get("avg_source_count")).doubleValue();
-        boolean passed=mockPublic==0&&aclLeaks==0&&indexed>0&&cases.size()>=10&&recall>=0.80&&ndcg>=0.70&&citationSupport>=0.90&&liveQueries>0&&avgCoverage>=0.80&&avgSources>=2;
+        int minimumCases=number(thresholds.get("minimumCases"),50); double minimumRecall=decimal(thresholds.get("recallAt20"),0.80); double minimumNdcg=decimal(thresholds.get("ndcgAt10"),0.70); double minimumCitationSupport=decimal(thresholds.get("citationSupport"),0.90);
+        boolean passed=mockPublic==0&&aclLeaks<=number(thresholds.get("aclLeaks"),0)&&indexed>0&&cases.size()>=minimumCases&&recall>=minimumRecall&&ndcg>=minimumNdcg&&citationSupport>=minimumCitationSupport&&liveQueries>0&&avgCoverage>=0.80&&avgSources>=2;
         Map<String,Object> metricMap=new java.util.LinkedHashMap<>();metricMap.put("caseCount",cases.size());metricMap.put("recallAt20",recall);metricMap.put("ndcgAt10",ndcg);metricMap.put("citationSupport",citationSupport);metricMap.put("citationCount",citations);metricMap.put("indexedDocuments",indexed);metricMap.put("mockPublic",mockPublic);metricMap.put("aclLeaks",aclLeaks);metricMap.put("liveQueries",liveQueries);metricMap.put("avgCitationCoverage",avgCoverage);metricMap.put("avgSourceCount",avgSources);metricMap.put("cases",caseResults);
         jdbc.update("insert into knowledge.evaluation_run(id,suite_id,status,provider_snapshot,metrics,passed,started_by,completed_at) values(?,?,'SUCCEEDED',?::jsonb,?::jsonb,?,?,now())",run,suite,toJson(runtime()),toJson(metricMap),passed,user.id());
         return Map.of("runId",run,"passed",passed,"metrics",metricMap);
     }
     public record ConfigRequest(String taskType,String providerName,String modelName,String baseUrl,String credentialRef,String status,Integer timeoutMs,String parametersJson){}
     private static boolean isReal(Map<String,Object> provider){String name=String.valueOf(provider.getOrDefault("provider",""));return !name.isBlank()&&!List.of("mock","test","fixture").contains(name.toLowerCase());}
+    private static int number(Object value,int fallback){if(value instanceof Number number)return number.intValue();try{return Integer.parseInt(String.valueOf(value));}catch(Exception ignored){return fallback;}}
+    private static double decimal(Object value,double fallback){if(value instanceof Number number)return number.doubleValue();try{return Double.parseDouble(String.valueOf(value));}catch(Exception ignored){return fallback;}}
     @SuppressWarnings("unchecked") private Map<String,Object> fromJson(String value){try{return objectMapper.readValue(value,Map.class);}catch(Exception exception){return Map.of();}}
     private String toJson(Object value){try{return objectMapper.writeValueAsString(value);}catch(Exception exception){throw new IllegalStateException("无法创建重处理事件",exception);}}
 }
