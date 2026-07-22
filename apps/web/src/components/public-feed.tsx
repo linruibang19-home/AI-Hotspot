@@ -43,6 +43,7 @@ export function PublicFeed({
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("ALL");
   const [contentType, setContentType] = useState("ALL");
   const [query, setQuery] = useState(initialQuery);
+  const [collapsedDates, setCollapsedDates] = useState<Set<string>>(() => new Set());
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("zh-CN"));
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
@@ -84,6 +85,15 @@ export function PublicFeed({
     }
   }
 
+  function toggleDate(key: string) {
+    setCollapsedDates((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   return (
     <>
       {featured ? (
@@ -107,19 +117,23 @@ export function PublicFeed({
 
       {groups.length === 0 ? (
         <section className="panel empty-state"><h2>暂无匹配内容</h2><p>清除筛选条件，或等待下一轮公开信源更新。</p><button className="button" type="button" onClick={() => { setQuery(""); setFeaturedFilter("ALL"); setSourceFilter("ALL"); setContentType("ALL"); }}>清除筛选</button></section>
-      ) : groups.map(([date, dateItems]) => (
-        <section className="date-section" key={date.key} aria-label={`${date.label}公开内容`}>
-          <div className="date-heading"><strong>{date.label}</strong><span>⌄</span><small>{date.weekday} · {dateItems.length} 条</small></div>
-          <div className="timeline">
+      ) : groups.map(([date, dateItems]) => {
+        const collapsed = collapsedDates.has(date.key);
+        const panelId = `date-feed-${date.key}`;
+        return <section className={`date-section ${collapsed ? "collapsed" : ""}`} key={date.key} aria-label={`${date.label}公开内容`}>
+          <button className="date-heading" type="button" aria-expanded={!collapsed} aria-controls={panelId} onClick={() => toggleDate(date.key)}>
+            <strong>{date.label}</strong><span className="date-chevron" aria-hidden="true">⌄</span><small>{date.weekday} · {dateItems.length} 条</small><span className="date-toggle-label">{collapsed ? "展开" : "收起"}</span>
+          </button>
+          {!collapsed ? <div className="timeline" id={panelId}>
             {dateItems.map((item) => (
               <div className="timeline-row" key={item.id}>
                 <time className="timeline-time" dateTime={item.publishedAt}>{formatTime(item.publishedAt)}</time>
                 <PublicContentCard item={item} showReason={featured} compact={!featured} />
               </div>
             ))}
-          </div>
-        </section>
-      ))}
+          </div> : null}
+        </section>;
+      })}
       {loadError ? <div className="load-more-error" role="alert">{loadError}</div> : null}
       {hasMore ? <div className="load-more"><button className="button" type="button" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "正在加载…" : "加载更多内容"}</button></div> : null}
     </>

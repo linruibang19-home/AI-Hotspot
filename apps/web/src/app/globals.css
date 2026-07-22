@@ -377,15 +377,28 @@ a {
 }
 
 .date-heading {
+  width: max-content;
   margin: 0 0 14px 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
   font-size: 18px;
   font-weight: 750;
+  cursor: pointer;
+  text-align: left;
+}
+
+.date-heading:focus-visible {
+  border-radius: 7px;
+  outline: 3px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  outline-offset: 5px;
 }
 
 .date-heading small {
   margin-left: 8px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 400;
 }
 
@@ -415,7 +428,7 @@ a {
   padding-top: 18px;
   color: var(--muted);
   font-family: "Geist Mono", monospace;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
   text-align: right;
 }
@@ -1653,6 +1666,11 @@ a {
 .date-heading strong { font-size: 18px; }
 .date-heading > span { color: var(--muted); font-size: 12px; }
 .date-heading small { margin-left: 0; }
+.date-heading .date-chevron { display: inline-block; font-size: 16px; transition: transform 160ms ease; }
+.date-section.collapsed .date-chevron { transform: rotate(-90deg); }
+.date-toggle-label { margin-left: 3px; opacity: 0; font-size: 11px !important; transition: opacity 150ms ease; }
+.date-heading:hover .date-toggle-label, .date-heading:focus-visible .date-toggle-label { opacity: 1; }
+.date-section.collapsed .date-heading { margin-bottom: 0; }
 .timeline::before { top: 5px; bottom: 12px; left: 64px; }
 .timeline-row { grid-template-columns: 64px minmax(0, 1fr); gap: 15px; }
 .timeline-time { position: relative; padding-top: 14px; color: #62767f; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 650; }
@@ -1727,10 +1745,10 @@ html[data-theme="dark"] .detail-summary { color: #afbec3; }
   .hot-row { grid-template-columns: 24px minmax(0, 1fr); }
   .hot-row small { display: none; }
   .date-section { margin-top: 26px; }
-  .timeline::before { left: 17px; }
-  .timeline-row { grid-template-columns: 36px minmax(0, 1fr); gap: 8px; }
-  .timeline-time { font-size: 0; }
-  .timeline-time::after { top: 18px; right: auto; left: 13px; }
+  .timeline::before { left: 47px; }
+  .timeline-row { grid-template-columns: 48px minmax(0, 1fr); gap: 10px; }
+  .timeline-time { padding-top: 15px; font-size: 12px; }
+  .timeline-time::after { top: 18px; right: -14px; left: auto; }
   .public-content-card { padding: 14px; }
   .content-meta { gap: 5px; }
   .source-avatar { width: 25px; height: 25px; }

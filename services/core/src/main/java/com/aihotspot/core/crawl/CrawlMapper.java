@@ -66,6 +66,7 @@ public interface CrawlMapper {
             String triggerType,
             String idempotencyKey,
             String status,
+            String pollOutcome,
             int attemptCount,
             int maxAttempts,
             Integer httpStatus,
@@ -99,4 +100,3 @@ public interface CrawlMapper {
             Instant lastFailedAt,
             Instant createdAt) {}
 }
-

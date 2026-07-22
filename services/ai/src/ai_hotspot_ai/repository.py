@@ -134,6 +134,7 @@ def start_fetch(payload: dict[str, object]) -> FetchContext:
             """
             update source.fetch_job
             set status = 'RUNNING', attempt_count = attempt_count + 1,
+                poll_outcome = 'PENDING',
                 started_at = coalesce(started_at, now()), updated_at = now()
             where id = %s and status in ('QUEUED', 'WAITING_RETRY')
             returning attempt_count
@@ -175,7 +176,8 @@ def finish_not_modified(context: FetchContext, response: FetchResponse) -> None:
             update source.fetch_job
             set status = 'SUCCEEDED', http_status = 304, artifact_count = 0,
                 discovered_count = 0, new_entry_count = 0, error_code = null,
-                last_error = null, finished_at = now(), updated_at = now()
+                poll_outcome = 'NOT_MODIFIED', last_error = null,
+                finished_at = now(), updated_at = now()
             where id = %s
             """,
             (context.job_id,),
@@ -184,6 +186,8 @@ def finish_not_modified(context: FetchContext, response: FetchResponse) -> None:
             """
             update source.source_endpoint
             set health_status = 'HEALTHY', last_success_at = now(), failure_count = 0,
+                last_poll_outcome = 'NOT_MODIFIED',
+                consecutive_no_change_count = consecutive_no_change_count + 1,
                 last_etag = coalesce(%s, last_etag),
                 last_modified = coalesce(%s, last_modified),
                 last_fetch_item_count = 0, updated_at = now()
@@ -383,20 +387,33 @@ def persist_feed(
             update source.fetch_job
             set status = 'SUCCEEDED', http_status = %s, artifact_count = 1,
                 discovered_count = %s, new_entry_count = %s, error_code = null,
+                poll_outcome = case when %s > 0 then 'NEW_CONTENT' else 'NO_NEW_CONTENT' end,
                 last_error = null, finished_at = now(), updated_at = now()
             where id = %s
             """,
-            (response.status_code, len(entries), len(inserted_raw), context.job_id),
+            (
+                response.status_code,
+                len(entries),
+                len(inserted_raw),
+                len(inserted_raw),
+                context.job_id,
+            ),
         )
         cursor.execute(
             """
             update source.source_endpoint
             set health_status = 'HEALTHY', last_success_at = now(), failure_count = 0,
+                last_poll_outcome = case
+                    when %s > 0 then 'NEW_CONTENT' else 'NO_NEW_CONTENT' end,
+                consecutive_no_change_count = case
+                    when %s > 0 then 0 else consecutive_no_change_count + 1 end,
                 last_etag = %s, last_modified = %s, last_content_hash = %s,
                 last_fetch_item_count = %s, updated_at = now()
             where id = %s
             """,
             (
+                len(inserted_raw),
+                len(inserted_raw),
                 response.etag,
                 response.last_modified,
                 content_hash,
@@ -472,29 +489,44 @@ def mark_fetch_failure(payload: dict[str, object], code: str, error: str, retrya
             return False
         should_retry = retryable and job["attempt_count"] < job["max_attempts"]
         status = "WAITING_RETRY" if should_retry else "DEAD_LETTERED"
+        poll_outcome = _failure_poll_outcome(code)
         cursor.execute(
             """
             update source.fetch_job
-            set status = %s, error_code = %s, last_error = %s,
+            set status = %s, poll_outcome = %s, error_code = %s, last_error = %s,
                 finished_at = case when %s then null else now() end, updated_at = now()
             where id = %s
             """,
-            (status, code, error[:2000], should_retry, job_id),
+            (status, poll_outcome, code, error[:2000], should_retry, job_id),
         )
         cursor.execute(
             """
             update source.source_endpoint
             set health_status = case when %s then 'WARNING' else 'FAILED' end,
+                last_poll_outcome = %s, consecutive_no_change_count = 0,
                 last_failure_at = now(), failure_count = failure_count + 1, updated_at = now()
             where id = %s
             """,
-            (should_retry, job["endpoint_id"]),
+            (should_retry, poll_outcome, job["endpoint_id"]),
         )
         if not should_retry:
             _insert_dead_letter(
                 cursor, payload, "q.crawl.worker", code, error, job["attempt_count"]
             )
     return should_retry
+
+
+def _failure_poll_outcome(code: str) -> str:
+    if code in {
+        "DNS_FAILURE",
+        "NETWORK_FAILURE",
+        "UPSTREAM_REJECTED",
+        "UPSTREAM_TEMPORARY",
+        "INVALID_REDIRECT",
+        "TOO_MANY_REDIRECTS",
+    }:
+        return "UPSTREAM_FAILURE"
+    return "CONTENT_FAILURE"
 
 
 def load_content(payload: dict[str, object]) -> ContentContext:

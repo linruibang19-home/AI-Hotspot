@@ -49,7 +49,7 @@ class CrawlServiceTests {
     private CrawlMapper.FetchJobView job(UUID id, UUID endpointId) {
         Instant now = Instant.now();
         return new CrawlMapper.FetchJobView(
-                id, endpointId, "Feed", "Source", "SCHEDULED", "key", "QUEUED",
+                id, endpointId, "Feed", "Source", "SCHEDULED", "key", "QUEUED", "PENDING",
                 0, 4, null, 0, 0, 0, null, null, UUID.randomUUID(), UUID.randomUUID(),
                 null, null, null, now, now);
     }

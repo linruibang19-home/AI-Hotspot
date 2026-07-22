@@ -42,7 +42,8 @@
 
     <select id="listJobs" resultType="com.aihotspot.core.crawl.CrawlMapper$FetchJobView">
         select j.id, j.endpoint_id, e.name as endpoint_name, s.name as source_name,
-               j.trigger_type, j.idempotency_key, j.status, j.attempt_count, j.max_attempts,
+               j.trigger_type, j.idempotency_key, j.status, j.poll_outcome,
+               j.attempt_count, j.max_attempts,
                j.http_status, j.artifact_count, j.discovered_count, j.new_entry_count,
                j.error_code, j.last_error, j.correlation_id, j.trace_id, j.replay_of_job_id,
                j.started_at, j.finished_at, j.created_at, j.updated_at
@@ -56,7 +57,8 @@
 
     <select id="findJob" resultType="com.aihotspot.core.crawl.CrawlMapper$FetchJobView">
         select j.id, j.endpoint_id, e.name as endpoint_name, s.name as source_name,
-               j.trigger_type, j.idempotency_key, j.status, j.attempt_count, j.max_attempts,
+               j.trigger_type, j.idempotency_key, j.status, j.poll_outcome,
+               j.attempt_count, j.max_attempts,
                j.http_status, j.artifact_count, j.discovered_count, j.new_entry_count,
                j.error_code, j.last_error, j.correlation_id, j.trace_id, j.replay_of_job_id,
                j.started_at, j.finished_at, j.created_at, j.updated_at
@@ -85,7 +87,8 @@
 
     <update id="resetJobForReplay">
         update source.fetch_job
-        set status = 'QUEUED', attempt_count = 0, error_code = null, last_error = null,
+        set status = 'QUEUED', poll_outcome = 'PENDING', attempt_count = 0,
+            error_code = null, last_error = null,
             started_at = null, finished_at = null, updated_at = now()
         where id = #{id} and status = 'DEAD_LETTERED'
     </update>

@@ -181,6 +181,25 @@ test("featured view uses the approved source taxonomy and real public content", 
   assert.match(feed, /个独立信源/);
 });
 
+test("featured and all feeds expose accessible daily folding with readable times", () => {
+  const feed = readFileSync("src/components/public-feed.tsx", "utf8");
+  const css = readFileSync("src/app/globals.css", "utf8");
+  assert.match(feed, /collapsedDates/);
+  assert.match(feed, /aria-expanded={!collapsed}/);
+  assert.match(feed, /aria-controls={panelId}/);
+  assert.match(feed, /date-toggle-label/);
+  assert.match(css, /font-size: 14px/);
+  assert.doesNotMatch(css, /\.timeline-time \{ font-size: 0/);
+});
+
+test("crawl monitoring distinguishes healthy no-change from failures", () => {
+  const page = readFileSync("src/app/admin/crawls/page.tsx", "utf8");
+  assert.match(page, /pollOutcome/);
+  assert.match(page, /正常零新增/);
+  assert.match(page, /上游失败/);
+  assert.match(page, /内容结构失败/);
+});
+
 test("M6 search, server favorites and report editorial are real API flows", () => {
   const all = readFileSync("src/app/all/page.tsx", "utf8");
   const searchApi = readFileSync("src/lib/public-content.ts", "utf8");

@@ -8,6 +8,7 @@ import { ApiError, apiFetch } from "@/lib/api";
 
 type FetchJob = {
   id: string; endpointName: string; sourceName: string; status: string;
+  pollOutcome: string;
   attemptCount: number; maxAttempts: number; httpStatus: number | null;
   discoveredCount: number; newEntryCount: number; lastError: string | null; createdAt: string;
 };
@@ -48,10 +49,10 @@ export default function AdminCrawlsPage() {
   }, [authLoading, load, user]);
 
   const metrics = useMemo(() => ({
-    succeeded: jobs.filter((job) => job.status === "SUCCEEDED").length,
     running: jobs.filter((job) => ["QUEUED", "RUNNING"].includes(job.status)).length,
     retrying: jobs.filter((job) => job.status === "WAITING_RETRY").length,
     pendingDead: deadLetters.filter((item) => item.replayStatus === "PENDING").length,
+    noChange: jobs.filter((job) => ["NO_NEW_CONTENT", "NOT_MODIFIED"].includes(job.pollOutcome)).length,
   }), [deadLetters, jobs]);
 
   async function dispatchDue() {
@@ -80,7 +81,7 @@ export default function AdminCrawlsPage() {
     <div className="page-shell">
       <PageHeader title="采集监控" description="真实 FetchJob、RabbitMQ 重试、DLQ 和受审计回放。" action={<div className="header-actions"><button className="button" type="button" onClick={() => void load()}>刷新</button><button className="button primary" type="button" disabled={busy === "dispatch"} onClick={() => void dispatchDue()}>{busy === "dispatch" ? "正在派发…" : "派发到期任务"}</button></div>} />
       <section className="metric-grid" aria-label="采集概览">
-        {[[metrics.succeeded, "已成功"], [metrics.running, "运行/排队"], [metrics.retrying, "等待重试"], [metrics.pendingDead, "待处理死信"]].map(([value, label]) => <div className="metric-card" key={label}><strong>{value}</strong><span>{label}</span></div>)}
+        {[[metrics.noChange, "正常零新增"], [metrics.running, "运行/排队"], [metrics.retrying, "等待重试"], [metrics.pendingDead, "待处理死信"]].map(([value, label]) => <div className="metric-card" key={label}><strong>{value}</strong><span>{label}</span></div>)}
       </section>
       {notice ? <div className="notice success" role="status">{notice}</div> : null}
       {error ? <div className="notice" role="alert">{error}</div> : null}
@@ -88,7 +89,7 @@ export default function AdminCrawlsPage() {
         <h2 id="jobs-title">采集任务</h2>
         {loading ? <div className="source-row skeleton" /> : jobs.length ? <div className="data-table">
           <div className="data-row head"><span>信源 / 任务</span><span>状态</span><span>结果</span><span>时间</span></div>
-          {jobs.map((job) => <div className="data-row" key={job.id}><span><strong>{job.sourceName}</strong><small>{job.endpointName} · {job.id.slice(0, 8)}</small></span><span><i className={`status-badge ${job.status.toLowerCase()}`}>{job.status}</i><small>{job.attemptCount}/{job.maxAttempts} 次</small></span><span>{job.httpStatus ?? "—"}<small>发现 {job.discoveredCount} · 新增 {job.newEntryCount}</small></span><span>{formatDate(job.createdAt)}{job.lastError ? <small title={job.lastError}>{job.lastError}</small> : null}</span></div>)}
+          {jobs.map((job) => <div className="data-row" key={job.id}><span><strong>{job.sourceName}</strong><small>{job.endpointName} · {job.id.slice(0, 8)}</small></span><span><i className={`status-badge ${job.status.toLowerCase()}`}>{job.status}</i><small>{outcomeLabel(job.pollOutcome)} · {job.attemptCount}/{job.maxAttempts} 次</small></span><span>{job.httpStatus ?? "—"}<small>发现 {job.discoveredCount} · 新增 {job.newEntryCount}</small></span><span>{formatDate(job.createdAt)}{job.lastError ? <small title={job.lastError}>{job.lastError}</small> : null}</span></div>)}
         </div> : <div className="empty-state"><h2>暂无采集任务</h2><p>启用 RSS/Atom Endpoint 后派发到期任务。</p></div>}
       </section>
       <section className="table-panel crawl-panel" aria-labelledby="dead-title">
@@ -104,6 +105,10 @@ export default function AdminCrawlsPage() {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function outcomeLabel(value: string) {
+  return ({ PENDING: "等待结果", NEW_CONTENT: "发现新内容", NO_NEW_CONTENT: "正常零新增", NOT_MODIFIED: "上游未变化", UPSTREAM_FAILURE: "上游失败", CONTENT_FAILURE: "内容结构失败", CANCELLED: "已取消" } as Record<string, string>)[value] ?? value;
 }
 
 function PermissionState({ title, detail, login = false }: { title: string; detail: string; login?: boolean }) {
