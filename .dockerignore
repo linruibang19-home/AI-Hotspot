@@ -10,6 +10,7 @@
 **/target
 **/.venv
 **/__pycache__
+artifacts
 AI Hotspot 项目方案
 AI_PULSE_DEVELOPMENT_SPEC.md
 AI_PULSE_PROTOTYPE.html
