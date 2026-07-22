@@ -211,7 +211,11 @@ def _filter_entries(entries: list[FeedEntry], config: dict[str, object]) -> list
             for keyword in keywords
         )
     ]
-    return _require_entries(filtered, "Connector result contains no configured keywords")
+    # A healthy feed can legitimately contain no entries matching the configured topic window.
+    # Treat that as a successful empty poll; retrying it only creates dead letters and marks a
+    # healthy upstream as failed. Structural parsers still reject genuinely empty/invalid feeds
+    # before this optional relevance filter is applied.
+    return filtered
 
 
 def _matches_keyword(text: str, keyword: str) -> bool:

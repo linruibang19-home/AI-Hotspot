@@ -109,7 +109,7 @@ do {
 } while ([int]$index.discoveredDocuments -gt 0)
 
 $research = PostJson "/research/query" @{ sessionId=$null; question="最近有哪些重要的 AI 模型发布、智能体和 RAG 技术动态？"; filters=@{} }
-Assert ($research.status -eq "SUCCEEDED") "真实 RAG 未产生有引用的答案"
+Assert ($research.answerStatus -eq "SUCCEEDED") "真实 RAG 未产生有引用的答案"
 $evaluation = PostJson "/admin/ai/evaluations/run" @{}
 Assert ($evaluation.passed -eq $true) "RAG 黄金集评测未通过"
 $readiness = Invoke-RestMethod -Uri "$base/admin/readiness" -WebSession $session -TimeoutSec 30
@@ -121,7 +121,7 @@ Assert ($readiness.status -eq "PASS") "M10 发布就绪门禁未通过"
   RealAdmitted = $status.real_admitted
   PublicContent = $status.public_content
   IndexedDocuments = $indexedTotal
-  RagResearch = $research.status
+  RagResearch = $research.answerStatus
   RagEvaluation = "PASS"
   M10Readiness = "PASS"
 } | Format-List

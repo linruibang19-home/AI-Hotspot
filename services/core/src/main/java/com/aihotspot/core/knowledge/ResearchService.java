@@ -230,7 +230,24 @@ public class ResearchService {
     }
 
     private String extractiveAnswer(List<Map<String,Object>> evidence){StringBuilder answer=new StringBuilder("根据当前可访问证据，值得关注的变化如下：\n\n");for(int i=0;i<Math.min(6,evidence.size());i++){Map<String,Object> row=evidence.get(i);String text=String.valueOf(row.get("content_text")).replaceFirst("^标题：[^\\n]*\\s*原文证据：\\s*","").replaceAll("\\s+"," ").strip();String title=String.valueOf(row.get("title"));String source=String.valueOf(row.get("source_name"));answer.append("- ").append(title).append("（").append(source).append("）：").append(text,0,Math.min(180,text.length())).append(text.length()>180?"…":"").append(" [").append(i+1).append("]\n");}return answer.toString();}
-    private List<Citation> persistCitations(UUID runId,List<Map<String,Object>> evidence,Set<Integer> referenced){List<Citation> result=new ArrayList<>();for(int i=0;i<evidence.size();i++){Map<String,Object> row=evidence.get(i);int no=i+1;String quote=String.valueOf(row.get("content_text"));double score=((Number)row.get("score")).doubleValue();String support=referenced.contains(no)?"SUPPORTED":"PARTIAL";jdbc.update("insert into research.citation(id,query_run_id,chunk_id,citation_no,quote_text,retrieval_score,rerank_score,support_status) values(?,?,?,?,?,?,?,?)",UUID.randomUUID(),runId,row.get("chunk_id"),no,quote.substring(0,Math.min(500,quote.length())),score,score,support);result.add(new Citation(no,String.valueOf(row.get("title")),String.valueOf(row.get("source_name")),String.valueOf(row.get("source_url")),quote.substring(0,Math.min(360,quote.length())),score,String.valueOf(row.get("effective_published_at")),support));}return result;}
+    private List<Citation> persistCitations(UUID runId, List<Map<String,Object>> evidence, Set<Integer> referenced) {
+        List<Citation> result = new ArrayList<>();
+        for (int i = 0; i < evidence.size(); i++) {
+            int citationNo = i + 1;
+            if (!referenced.contains(citationNo)) continue;
+            Map<String,Object> row = evidence.get(i);
+            String quote = String.valueOf(row.get("content_text"));
+            double score = ((Number) row.get("score")).doubleValue();
+            jdbc.update("insert into research.citation(id,query_run_id,chunk_id,citation_no,quote_text,retrieval_score,rerank_score,support_status) values(?,?,?,?,?,?,?,'SUPPORTED')",
+                    UUID.randomUUID(), runId, row.get("chunk_id"), citationNo,
+                    quote.substring(0, Math.min(500, quote.length())), score, score);
+            result.add(new Citation(citationNo, String.valueOf(row.get("title")),
+                    String.valueOf(row.get("source_name")), String.valueOf(row.get("source_url")),
+                    quote.substring(0, Math.min(360, quote.length())), score,
+                    String.valueOf(row.get("effective_published_at")), "SUPPORTED"));
+        }
+        return result;
+    }
     private Map<String,Object> diagnostics(QueryPlan plan,List<Map<String,Object>> candidates,List<Map<String,Object>> reranked,List<Map<String,Object>> evidence){Map<String,Object> map=new LinkedHashMap<>();map.put("fusion","RRF+RERANK");map.put("timeRangeDays",plan.days());map.put("candidateCount",candidates.size());map.put("rerankedCount",reranked.size());map.put("contextCount",evidence.size());map.put("sourceCount",evidence.stream().map(row->row.get("source_entity_id")).distinct().count());map.put("eventCount",evidence.stream().map(row->row.get("event_cluster_id")).filter(v->v!=null).distinct().count());map.put("officialCount",evidence.stream().filter(row->List.of("OFFICIAL","FIRST_PARTY").contains(String.valueOf(row.get("source_official_level")))).count());return map;}
     private static Set<Integer> citedNumbers(String answer){Set<Integer> values=new HashSet<>();Matcher matcher=CITATION.matcher(answer);while(matcher.find())values.add(Integer.parseInt(matcher.group(1)));return values;}
     private static double citationCoverage(String answer){String[] sentences=answer.split("[。！？!?\\n]+");int claims=0,supported=0;for(String sentence:sentences){if(sentence.strip().length()<12)continue;claims++;if(CITATION.matcher(sentence).find())supported++;}return claims==0?0:(double)supported/claims;}

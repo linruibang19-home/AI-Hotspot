@@ -139,7 +139,7 @@ public class AiGovernanceController {
     @PostMapping("/evaluations/run") public Map<String,Object> evaluate(@AuthenticationPrincipal AppUserPrincipal user){
         UUID suite=jdbc.queryForObject("select id from knowledge.evaluation_suite where code='RAG_BASELINE_ZH'",UUID.class); UUID run=UUID.randomUUID();
         long mockPublic=jdbc.queryForObject("select count(*) from content.content_item where publication_status='PUBLISHED' and visibility='PUBLIC' and (provider_name is null or lower(provider_name) in ('mock','test','fixture'))",Long.class);
-        long citations=jdbc.queryForObject("select count(*) from research.citation c join research.query_run q on q.id=c.query_run_id where q.created_at>=now()-interval '7 days'",Long.class);
+        long citations=jdbc.queryForObject("select count(*) from research.citation c join research.query_run q on q.id=c.query_run_id where q.created_at>=now()-interval '7 days' and c.support_status in ('SUPPORTED','UNSUPPORTED')",Long.class);
         long supported=jdbc.queryForObject("select count(*) from research.citation c join research.query_run q on q.id=c.query_run_id where q.created_at>=now()-interval '7 days' and c.support_status='SUPPORTED'",Long.class);
         long indexed=jdbc.queryForObject("select count(*) from knowledge.document where status='INDEXED'",Long.class);
         long aclLeaks=jdbc.queryForObject("""

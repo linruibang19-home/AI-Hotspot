@@ -127,6 +127,16 @@ def test_connector_keyword_filter_keeps_only_ai_items():
     assert [entry.title for entry in entries] == ["New AI agent platform"]
 
 
+def test_connector_keyword_filter_allows_a_healthy_empty_poll():
+    feed = b"""<?xml version='1.0'?><rss version='2.0'><channel><title>Official</title>
+    <item><guid>1</guid><title>Quarterly financial results</title></item>
+    </channel></rss>"""
+    entries = parse_connector(
+        "RSS", feed, "https://example.com/feed", {"includeKeywords": ["AI", "agent"]}, 10
+    )
+    assert entries == []
+
+
 def test_short_ascii_keyword_does_not_match_inside_unrelated_word():
     feed = b"""<?xml version='1.0'?><rss version='2.0'><channel><title>Official</title>
     <item><guid>1</guid><title>Maintainers guide</title></item>

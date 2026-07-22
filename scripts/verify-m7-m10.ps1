@@ -49,7 +49,7 @@ $reindex = PostJson "/admin/ai/reindex" @{}
 $evaluation = PostJson "/admin/ai/evaluations/run" @{}
 
 $research = PostJson "/research/query" @{ sessionId = $null; question = "OpenAI 与 Anthropic 最近有哪些重要模型动态？"; filters = @{} }
-Assert ($research.status -in @("SUCCEEDED", "NO_EVIDENCE")) "M7 研究查询状态异常"
+Assert ($research.answerStatus -in @("SUCCEEDED", "NO_EVIDENCE")) "M7 研究查询状态异常"
 
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $subscription = PostJson "/subscriptions" @{ name = "M8 自动验收 $stamp"; frequency = "DAILY"; timezone = "Asia/Shanghai"; sendTime = "09:00:00"; weekday = $null; topicSlugs = @(); maxItems = 5 }
@@ -81,7 +81,7 @@ if ($RequireBetaReady) {
   ProviderSmoke = if ($smoke.passed) { "PASS" } else { "BLOCKED_MOCK" }
   IndexedDocuments = $reindex.indexedDocuments
   RagEvaluation = if ($evaluation.passed) { "PASS" } else { "BLOCKED_NO_REAL_INDEX" }
-  Research = $research.status
+  Research = $research.answerStatus
   SubscriptionDelivery = $delivery.status
   AgentL0 = $agentDetail.status
   AgentL2Approval = $controlledDetail.status
