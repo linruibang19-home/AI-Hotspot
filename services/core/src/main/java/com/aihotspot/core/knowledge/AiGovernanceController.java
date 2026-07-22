@@ -101,6 +101,11 @@ public class AiGovernanceController {
               count(*) filter(where answer_status='NO_EVIDENCE') no_evidence,
               coalesce(round(avg(latency_ms) filter(where latency_ms is not null)),0) avg_latency_ms,
               coalesce(round((percentile_cont(0.95) within group(order by latency_ms) filter(where latency_ms is not null))::numeric),0) p95_latency_ms,
+              coalesce(round(avg((retrieval_diagnostics->'stageTimingsMs'->>'embedding')::numeric)),0) avg_embedding_ms,
+              coalesce(round(avg((retrieval_diagnostics->'stageTimingsMs'->>'hybridRetrieval')::numeric)),0) avg_retrieval_ms,
+              coalesce(round(avg((retrieval_diagnostics->'stageTimingsMs'->>'rerank')::numeric)),0) avg_rerank_ms,
+              coalesce(round(avg((retrieval_diagnostics->'stageTimingsMs'->>'generation')::numeric)),0) avg_generation_ms,
+              coalesce(round(avg((retrieval_diagnostics->'stageTimingsMs'->>'citationRepair')::numeric)),0) avg_citation_repair_ms,
               coalesce(round(avg(citation_coverage)::numeric,3),0) avg_citation_coverage,
               coalesce(round(avg((retrieval_diagnostics->>'sourceCount')::numeric),2),0) avg_source_count,
               coalesce(round(avg((retrieval_diagnostics->>'contextCount')::numeric),2),0) avg_context_count

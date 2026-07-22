@@ -13,7 +13,7 @@ class GenerationProvider(ABC):
     model: str
 
     @abstractmethod
-    async def generate(self, prompt: str) -> str: ...
+    async def generate(self, prompt: str, max_tokens: int | None = None) -> str: ...
 
 
 class EmbeddingProvider(ABC):

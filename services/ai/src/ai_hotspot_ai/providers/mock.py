@@ -12,7 +12,7 @@ class MockGenerationProvider(GenerationProvider):
     name = "mock"
     model = "mock-generation-v1"
 
-    async def generate(self, prompt: str) -> str:
+    async def generate(self, prompt: str, max_tokens: int | None = None) -> str:
         if prompt.startswith("AI_HOTSPOT_CONTENT_ANALYSIS_V"):
             fields = {}
             for line in prompt.splitlines():

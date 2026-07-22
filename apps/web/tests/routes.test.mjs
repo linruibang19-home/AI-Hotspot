@@ -110,6 +110,9 @@ test("M7-M10 workspaces use real APIs and expose governance", () => {
   const readiness = readFileSync("src/app/admin/readiness/page.tsx", "utf8");
   const operations = readFileSync("src/app/admin/operations/page.tsx", "utf8");
   assert.match(workspaces, /\/research\/query/);
+  assert.match(workspaces, /stageTimingsMs/);
+  assert.match(workspaces, /inline-citation/);
+  assert.match(workspaces, /RAG_STAGES/);
   assert.match(workspaces, /\/subscriptions/);
   assert.match(workspaces, /\/agents\/runs/);
   assert.match(models, /\/admin\/ai\/evaluations\/run/);

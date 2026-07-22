@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 
 class GenerateRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=20_000)
+    max_tokens: int | None = Field(default=None, ge=64, le=2_000)
 
 
 class GenerateResponse(BaseModel):

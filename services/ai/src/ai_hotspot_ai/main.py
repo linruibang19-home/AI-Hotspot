@@ -89,7 +89,7 @@ async def providers(request: Request):
 async def generate(payload: GenerateRequest, request: Request):
     provider = _providers(request).generation
     return GenerateResponse(
-        text=await provider.generate(payload.prompt),
+        text=await provider.generate(payload.prompt, payload.max_tokens),
         provider=provider.name,
         model=provider.model,
     )

@@ -23,7 +23,7 @@ async def test_mock_provider_flow_is_deterministic() -> None:
     providers = (await request("GET", "/api/v1/providers")).json()
     first = (await request("POST", "/api/v1/mock/embed", json={"texts": ["AI Hotspot"]})).json()
     second = (await request("POST", "/api/v1/mock/embed", json={"texts": ["AI Hotspot"]})).json()
-    generated = (await request("POST", "/api/v1/mock/generate", json={"prompt": "生成摘要"})).json()
+    generated = (await request("POST", "/api/v1/mock/generate", json={"prompt": "生成摘要", "max_tokens": 256})).json()
 
     assert providers["generation"]["provider"] == "mock"
     assert first["vectors"] == second["vectors"]

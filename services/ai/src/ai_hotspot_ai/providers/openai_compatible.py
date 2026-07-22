@@ -11,7 +11,7 @@ class OpenAICompatibleGenerationProvider(GenerationProvider):
         self.api_key = api_key
         self.model = model
 
-    async def generate(self, prompt: str) -> str:
+    async def generate(self, prompt: str, max_tokens: int | None = None) -> str:
         payload: dict[str, object] = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
@@ -19,6 +19,8 @@ class OpenAICompatibleGenerationProvider(GenerationProvider):
         }
         if "json" in prompt.lower() or "recommendationReason" in prompt:
             payload["response_format"] = {"type": "json_object"}
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
         async with httpx.AsyncClient(timeout=45) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
