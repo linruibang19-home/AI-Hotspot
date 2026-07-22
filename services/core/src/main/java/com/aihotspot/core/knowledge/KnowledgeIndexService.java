@@ -55,6 +55,7 @@ public class KnowledgeIndexService {
             select c.id, coalesce(c.title_zh,c.original_title) title,
                    c.summary_zh generated_summary, r.raw_summary source_body, c.index_policy,
                    coalesce(c.canonical_url,c.original_url) source_url, c.source_published_at,
+                   c.source_published_at_source,
                    c.effective_published_at, c.source_entity_id, c.source_official_level,
                    s.authority_score, c.quality_score, c.final_score, ev.event_cluster_id
             from content.content_item c
@@ -118,10 +119,10 @@ public class KnowledgeIndexService {
             String text = chunks.get(index);
             UUID chunkId = UUID.randomUUID();
             jdbc.update("""
-                insert into knowledge.chunk(id,document_id,ordinal,content_text,token_count,source_url,source_published_at,
+                insert into knowledge.chunk(id,document_id,ordinal,content_text,token_count,source_url,source_published_at,source_published_at_source,
                   content_kind,source_entity_id,event_cluster_id,source_official_level,authority_score,quality_score,final_score,effective_published_at)
-                values(?,?,?,?,?,?,?,'SOURCE_BODY',?,?,?,?,?,?,?)
-                """, chunkId, documentId, index, text, Math.max(1, text.length() / 3), row.get("source_url"), row.get("source_published_at"),
+                values(?,?,?,?,?,?,?,?,'SOURCE_BODY',?,?,?,?,?,?,?)
+                """, chunkId, documentId, index, text, Math.max(1, text.length() / 3), row.get("source_url"), row.get("source_published_at"),row.get("source_published_at_source"),
                 row.get("source_entity_id"),row.get("event_cluster_id"),row.get("source_official_level"),row.get("authority_score"),
                 row.get("quality_score"),row.get("final_score"),row.get("effective_published_at"));
             jdbc.update("update knowledge.chunk set embedding=?::vector,embedding_model=?,embedded_at=now() where id=?",

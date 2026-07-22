@@ -11,6 +11,7 @@ from ai_hotspot_ai.feed import (
     FeedEntry,
     FeedError,
     canonicalize_url,
+    explicit_publication_date,
     parse_feed,
     strip_markup,
 )
@@ -74,7 +75,18 @@ def _parse_sitemap(
         title = (
             re.sub(r"[-_]+", " ", path_name).strip() or urlsplit(url).hostname or "Sitemap entry"
         )
-        entries.append(_entry(url, url, title, None, published_at, None, {"loc": url, **values}))
+        entries.append(
+            _entry(
+                url,
+                url,
+                title,
+                None,
+                published_at,
+                "SITEMAP_LASTMOD" if published_at else None,
+                None,
+                {"loc": url, **values},
+            )
+        )
         if len(entries) >= max_items:
             break
     return _require_entries(entries, "Sitemap contains no usable URLs")
@@ -133,7 +145,7 @@ def _parse_website(
         if not title or len(title) < 4:
             continue
         seen.add(url)
-        published_at = _embedded_publication_date(title)
+        published_at, published_at_source = explicit_publication_date(title, url)
         entries.append(
             _entry(
                 url,
@@ -141,15 +153,28 @@ def _parse_website(
                 title,
                 None,
                 published_at,
+                published_at_source,
                 None,
-                {"url": url, "title": title, "dateSource": "LINK_TEXT" if published_at else None},
+                {"url": url, "title": title},
             )
         )
         if len(entries) >= max_items:
             break
     if not entries:
         title = strip_markup(" ".join(parser.page_title), 600) or base_host or "Website"
-        entries.append(_entry(base_url, base_url, title, None, None, None, {"url": base_url}))
+        published_at, published_at_source = explicit_publication_date(title, base_url)
+        entries.append(
+            _entry(
+                base_url,
+                base_url,
+                title,
+                None,
+                published_at,
+                published_at_source,
+                None,
+                {"url": base_url},
+            )
+        )
     return entries
 
 
@@ -182,13 +207,23 @@ def _parse_github(content: bytes, base_url: str, max_items: int) -> list[FeedEnt
             continue
         author = row.get("author") if isinstance(row.get("author"), dict) else {}
         commit_author = commit.get("author") if isinstance(commit.get("author"), dict) else {}
+        date_value = row.get("published_at") or commit_author.get("date")
+        published_at = _parse_datetime(date_value)
+        published_at_source = None
+        if published_at:
+            published_at_source = (
+                "GITHUB_RELEASE_PUBLISHED_AT"
+                if row.get("published_at")
+                else "GITHUB_COMMIT_AUTHOR_DATE"
+            )
         entries.append(
             _entry(
                 external,
                 url,
                 title,
                 strip_markup(row.get("body")),
-                _parse_datetime(row.get("published_at") or commit_author.get("date")),
+                published_at,
+                published_at_source,
                 author.get("login") or commit_author.get("name"),
                 row,
             )
@@ -242,13 +277,16 @@ def _parse_hugging_face(content: bytes, base_url: str, max_items: int) -> list[F
         url = canonicalize_url(
             paper.get("url") or f"https://huggingface.co/papers/{paper_id}", base_url
         )
+        date_value = row.get("publishedAt") or paper.get("publishedAt")
+        published_at = _parse_datetime(date_value)
         entries.append(
             _entry(
                 paper_id,
                 url,
                 title,
                 strip_markup(paper.get("summary") or paper.get("abstract")),
-                _parse_datetime(row.get("publishedAt") or paper.get("publishedAt")),
+                published_at,
+                "HUGGING_FACE_PUBLISHED_AT" if published_at else None,
                 None,
                 row,
             )
@@ -277,13 +315,18 @@ def _parse_openreview(content: bytes, base_url: str, max_items: int) -> list[Fee
             ", ".join(str(value) for value in authors[:10]) if isinstance(authors, list) else None
         )
         url = f"https://openreview.net/forum?id={row.get('forum') or note_id}"
+        date_value = row.get("pdate") or row.get("cdate")
+        published_at = _epoch_datetime(date_value)
         entries.append(
             _entry(
                 note_id,
                 url,
                 title,
                 strip_markup(str(_value(fields.get("abstract")) or "")),
-                _epoch_datetime(row.get("pdate") or row.get("cdate")),
+                published_at,
+                ("OPENREVIEW_PDATE" if row.get("pdate") else "OPENREVIEW_CDATE")
+                if published_at
+                else None,
                 author,
                 row,
             )
@@ -312,13 +355,15 @@ def _parse_hacker_news(
         url = canonicalize_url(
             row.get("url") or f"https://news.ycombinator.com/item?id={object_id}", base_url
         )
+        published_at = _parse_datetime(row.get("created_at"))
         entries.append(
             _entry(
                 object_id,
                 url,
                 title,
                 strip_markup(row.get("story_text") or row.get("comment_text")),
-                _parse_datetime(row.get("created_at")),
+                published_at,
+                "HACKER_NEWS_CREATED_AT" if published_at else None,
                 row.get("author"),
                 row,
             )
@@ -334,6 +379,7 @@ def _entry(
     title: str,
     summary: str | None,
     published_at: datetime | None,
+    published_at_source: str | None,
     author: str | None,
     payload: dict[str, object],
 ) -> FeedEntry:
@@ -343,6 +389,7 @@ def _entry(
         "title": title,
         "summary": summary,
         "publishedAt": published_at.isoformat() if published_at else None,
+        "publishedAtSource": published_at_source,
         "author": author,
     }
     return FeedEntry(
@@ -352,8 +399,9 @@ def _entry(
         title=title[:600],
         summary=summary,
         published_at=published_at,
+        published_at_source=published_at_source,
         author_name=author,
-        payload={**payload, "normalized": normalized},
+        payload={**payload, "dateSource": published_at_source, "normalized": normalized},
         entry_hash=hashlib.sha256(
             json.dumps(normalized, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest(),
@@ -385,33 +433,24 @@ def _parse_datetime(value: object) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(UTC)
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(UTC)
+        return parsed if parsed <= datetime.now(UTC) else None
     except ValueError:
         return None
-
-
-_ENGLISH_DATE = re.compile(
-    r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(\d{4})\b",
-    re.IGNORECASE,
-)
 
 
 def _embedded_publication_date(text: str) -> datetime | None:
-    """Extract only an explicit English long date exposed by a website listing item."""
-    match = _ENGLISH_DATE.search(text)
-    if not match:
-        return None
-    try:
-        value = datetime.strptime(" ".join(match.groups()), "%B %d %Y").replace(tzinfo=UTC)
-    except ValueError:
-        return None
-    return value if value <= datetime.now(UTC) else None
+    """Compatibility wrapper for older callers."""
+    return explicit_publication_date(text, None)[0]
 
 
 def _epoch_datetime(value: object) -> datetime | None:
     try:
         number = float(value)
-        return datetime.fromtimestamp(number / 1000 if number > 10_000_000_000 else number, tz=UTC)
+        parsed = datetime.fromtimestamp(
+            number / 1000 if number > 10_000_000_000 else number, tz=UTC
+        )
+        return parsed if parsed <= datetime.now(UTC) else None
     except (TypeError, ValueError, OSError):
         return None
 

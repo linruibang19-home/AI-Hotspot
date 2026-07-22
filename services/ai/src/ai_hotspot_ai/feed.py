@@ -52,6 +52,7 @@ class FeedEntry:
     title: str
     summary: str | None
     published_at: datetime | None
+    published_at_source: str | None
     author_name: str | None
     payload: dict[str, object]
     entry_hash: str
@@ -208,12 +209,16 @@ def parse_feed(content: bytes, base_url: str, max_items: int) -> list[FeedEntry]
             continue
         original_url = canonicalize_url(source.get("link"), base_url)
         external_source = source.get("id") or source.get("guid") or original_url
-        published_at = _entry_datetime(source)
+        published_at, published_at_source = _entry_datetime(source)
         content_values = source.get("content") or [{}]
         summary = strip_markup(
             source.get("summary") or source.get("description") or content_values[0].get("value"),
             4000,
         )
+        if published_at is None:
+            published_at, published_at_source = explicit_publication_date(
+                f"{title} {summary or ''}", original_url
+            )
         if not external_source:
             external_source = f"{title}|{published_at.isoformat() if published_at else ''}"
         external_id = hashlib.sha256(str(external_source).encode("utf-8")).hexdigest()
@@ -223,6 +228,7 @@ def parse_feed(content: bytes, base_url: str, max_items: int) -> list[FeedEntry]
             "title": title,
             "summary": summary,
             "publishedAt": published_at.isoformat() if published_at else None,
+            "publishedAtSource": published_at_source,
             "author": strip_markup(source.get("author"), 400),
             "tags": [
                 str(tag.get("term"))[:200] for tag in source.get("tags", [])[:20] if tag.get("term")
@@ -239,6 +245,7 @@ def parse_feed(content: bytes, base_url: str, max_items: int) -> list[FeedEntry]
                 title=title,
                 summary=summary,
                 published_at=published_at,
+                published_at_source=published_at_source,
                 author_name=normalized["author"],
                 payload=normalized,
                 entry_hash=entry_hash,
@@ -249,9 +256,69 @@ def parse_feed(content: bytes, base_url: str, max_items: int) -> list[FeedEntry]
     return entries
 
 
-def _entry_datetime(source: dict[str, object]) -> datetime | None:
-    for key in ("published_parsed", "updated_parsed", "created_parsed"):
+def _entry_datetime(source: dict[str, object]) -> tuple[datetime | None, str | None]:
+    for key, provenance in (
+        ("published_parsed", "FEED_PUBLISHED"),
+        ("updated_parsed", "FEED_UPDATED"),
+        ("created_parsed", "FEED_CREATED"),
+    ):
         value = source.get(key)
         if value:
-            return datetime.fromtimestamp(calendar.timegm(value), tz=UTC)
-    return None
+            parsed = datetime.fromtimestamp(calendar.timegm(value), tz=UTC)
+            return (parsed, provenance) if parsed <= datetime.now(UTC) else (None, None)
+    return None, None
+
+
+_ENGLISH_DATE = re.compile(
+    r"\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+    r"\s+(\d{1,2}),\s+(\d{4})\b",
+    re.IGNORECASE,
+)
+_ISO_TEXT_DATE = re.compile(
+    r"(?<!\d)(20\d{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12]\d|3[01])(?!\d)"
+)
+_CHINESE_DATE = re.compile(r"(?<!\d)(20\d{2})年(0?[1-9]|1[0-2])月(0?[1-9]|[12]\d|3[01])日")
+_URL_SLASH_DATE = re.compile(r"/(20\d{2})/(0?[1-9]|1[0-2])/(0?[1-9]|[12]\d|3[01])(?:/|$)")
+_URL_DASH_DATE = re.compile(r"/(20\d{2})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?:[-/]|$)")
+
+
+def explicit_publication_date(
+    text: str | None, url: str | None
+) -> tuple[datetime | None, str | None]:
+    """Recover only explicit calendar dates and retain where the date came from."""
+    value = text or ""
+    english = _ENGLISH_DATE.search(value)
+    if english:
+        parsed = None
+        for date_format in ("%B %d %Y", "%b %d %Y"):
+            try:
+                parsed = datetime.strptime(" ".join(english.groups()), date_format).replace(
+                    tzinfo=UTC
+                )
+                break
+            except ValueError:
+                continue
+        if parsed is not None and parsed <= datetime.now(UTC):
+            return parsed, "LINK_TEXT"
+    for pattern in (_ISO_TEXT_DATE, _CHINESE_DATE):
+        match = pattern.search(value)
+        parsed = _date_from_groups(match)
+        if parsed is not None:
+            return parsed, "LINK_TEXT"
+    for pattern in (_URL_SLASH_DATE, _URL_DASH_DATE):
+        match = pattern.search(url or "")
+        parsed = _date_from_groups(match)
+        if parsed is not None:
+            return parsed, "URL_PATH"
+    return None, None
+
+
+def _date_from_groups(match: re.Match[str] | None) -> datetime | None:
+    if not match:
+        return None
+    try:
+        parsed = datetime(*(int(part) for part in match.groups()), tzinfo=UTC)
+    except ValueError:
+        return None
+    return parsed if parsed <= datetime.now(UTC) else None

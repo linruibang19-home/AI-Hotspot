@@ -210,6 +210,7 @@ def persist_feed(
             "raw_title": entry.title,
             "raw_summary": entry.summary,
             "source_published_at": entry.published_at.isoformat() if entry.published_at else None,
+            "source_published_at_source": entry.published_at_source,
             "author_name": entry.author_name,
             "payload": entry.payload,
             "entry_hash": entry.entry_hash,
@@ -252,16 +253,19 @@ def persist_feed(
                 select * from jsonb_to_recordset(%s::jsonb) as x(
                     id uuid, external_id text, original_url text, canonical_url text,
                     raw_title text, raw_summary text, source_published_at timestamptz,
+                    source_published_at_source text,
                     author_name text, payload jsonb, entry_hash text
                 )
             )
             insert into source.raw_entry (
                 id, fetch_artifact_id, endpoint_id, external_id, original_url,
                 canonical_url, raw_title, raw_summary, source_published_at,
+                source_published_at_source,
                 author_name, payload, entry_hash, normalization_status
             )
             select id, %s, %s, external_id, original_url, canonical_url,
-                   raw_title, raw_summary, source_published_at, author_name,
+                   raw_title, raw_summary, source_published_at,
+                   source_published_at_source, author_name,
                    payload, entry_hash, 'PENDING'
             from incoming
             on conflict (endpoint_id, external_id) do nothing
@@ -276,6 +280,7 @@ def persist_feed(
                 select * from jsonb_to_recordset(%s::jsonb) as x(
                     external_id text, original_url text, canonical_url text,
                     raw_title text, raw_summary text, source_published_at timestamptz,
+                    source_published_at_source text,
                     author_name text, payload jsonb, entry_hash text
                 )
             )
@@ -291,6 +296,10 @@ def persist_feed(
                     when r.entry_hash <> i.entry_hash then i.raw_title else r.raw_title end,
                 raw_summary = case
                     when r.entry_hash <> i.entry_hash then i.raw_summary else r.raw_summary end,
+                source_published_at = coalesce(i.source_published_at, r.source_published_at),
+                source_published_at_source = case
+                    when i.source_published_at is not null then i.source_published_at_source
+                    else r.source_published_at_source end,
                 payload = case
                     when r.entry_hash <> i.entry_hash then i.payload else r.payload end,
                 entry_hash = i.entry_hash
@@ -312,11 +321,13 @@ def persist_feed(
                 insert into content.content_item (
                     id, raw_entry_id, source_entity_id, endpoint_id, original_url,
                     canonical_url, original_title, content_type, source_type,
-                    source_official_level, source_published_at, display_policy,
+                    source_official_level, source_published_at, source_published_at_source,
+                    display_policy,
                     index_policy, policy_snapshot
                 )
                 select i.id, r.id, %s, %s, r.original_url, r.canonical_url,
                        r.raw_title, %s, %s, %s, r.source_published_at,
+                       r.source_published_at_source,
                        %s, %s, %s
                 from incoming i
                 join source.raw_entry r on r.id = i.raw_entry_id
@@ -338,6 +349,35 @@ def persist_feed(
             created_content = cursor.fetchall()
             content_ids = [row["id"] for row in created_content]
             _append_content_events(cursor, context, created_content)
+        cursor.execute(
+            """
+            update content.content_item c
+            set source_published_at = r.source_published_at,
+                source_published_at_source = r.source_published_at_source,
+                updated_at = now()
+            from source.raw_entry r
+            where c.raw_entry_id = r.id and r.endpoint_id = %s
+              and r.source_published_at is not null
+              and (c.source_published_at is null
+                   or c.source_published_at_source is distinct from r.source_published_at_source)
+            """,
+            (context.endpoint_id,),
+        )
+        cursor.execute(
+            """
+            update knowledge.chunk ch
+            set source_published_at = c.source_published_at,
+                source_published_at_source = c.source_published_at_source,
+                effective_published_at = c.effective_published_at
+            from knowledge.document d
+            join content.content_item c on c.id = d.content_item_id
+            where ch.document_id = d.id and c.endpoint_id = %s
+              and c.source_published_at is not null
+              and (ch.source_published_at is null
+                   or ch.source_published_at_source is distinct from c.source_published_at_source)
+            """,
+            (context.endpoint_id,),
+        )
         cursor.execute(
             """
             update source.fetch_job

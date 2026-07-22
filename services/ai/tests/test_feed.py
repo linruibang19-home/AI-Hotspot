@@ -30,6 +30,7 @@ def test_parse_rss_and_atom(document: bytes) -> None:
     assert len(entries[0].entry_hash) == 64
     assert entries[0].published_at is not None
     assert entries[0].published_at.tzinfo == UTC
+    assert entries[0].published_at_source in {"FEED_PUBLISHED", "FEED_UPDATED"}
 
 
 def test_rss_html_is_plain_text_and_fragment_is_removed() -> None:
@@ -45,6 +46,16 @@ def test_repeated_parse_has_stable_identity_and_hash() -> None:
 
     assert first.external_id == second.external_id
     assert first.entry_hash == second.entry_hash
+
+
+def test_feed_recovers_explicit_date_from_url_when_feed_date_is_missing() -> None:
+    feed = b"""<rss version="2.0"><channel><title>AI Feed</title><item>
+    <guid>dated-url</guid><title>Release notes</title>
+    <link>https://example.com/2026/06/29/release</link></item></channel></rss>"""
+    entry = parse_feed(feed, "https://example.com/feed.xml", 10)[0]
+
+    assert entry.published_at.isoformat() == "2026-06-29T00:00:00+00:00"
+    assert entry.published_at_source == "URL_PATH"
 
 
 def test_unsafe_xml_is_rejected_without_retry() -> None:

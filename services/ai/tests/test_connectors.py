@@ -33,7 +33,44 @@ def test_website_connector_extracts_explicit_publication_date():
     entries = parse_connector("WEBSITE", website, "https://example.com", {}, 10)
     assert entries[0].published_at is not None
     assert entries[0].published_at.isoformat() == "2025-12-09T00:00:00+00:00"
+    assert entries[0].published_at_source == "LINK_TEXT"
     assert entries[0].payload["dateSource"] == "LINK_TEXT"
+
+
+@pytest.mark.parametrize(
+    ("title", "url", "expected", "source"),
+    [
+        ("Update Jul 14, 2026", "/news/update", "2026-07-14T00:00:00+00:00", "LINK_TEXT"),
+        ("Update 2026年7月12日", "/news/update", "2026-07-12T00:00:00+00:00", "LINK_TEXT"),
+        ("Update", "/2026/06/29/update", "2026-06-29T00:00:00+00:00", "URL_PATH"),
+        ("Update", "/changelog/2026-07-14-update", "2026-07-14T00:00:00+00:00", "URL_PATH"),
+    ],
+)
+def test_website_connector_recovers_explicit_date_with_provenance(
+    title, url, expected, source
+):
+    entries = parse_connector(
+        "WEBSITE",
+        f'<a href="{url}">{title}</a>'.encode(),
+        "https://example.com",
+        {},
+        10,
+    )
+    assert entries[0].published_at.isoformat() == expected
+    assert entries[0].published_at_source == source
+    assert entries[0].payload["normalized"]["publishedAtSource"] == source
+
+
+def test_website_connector_does_not_accept_future_explicit_date():
+    entries = parse_connector(
+        "WEBSITE",
+        b'<a href="/2099/01/01/update">Update Jan 1, 2099</a>',
+        "https://example.com",
+        {},
+        10,
+    )
+    assert entries[0].published_at is None
+    assert entries[0].published_at_source is None
 
 
 @pytest.mark.parametrize(
@@ -107,6 +144,7 @@ def test_json_connectors_produce_unified_entries(connector, payload, expected_ti
     assert len(entries) == 1
     assert entries[0].title == expected_title
     assert len(entries[0].external_id) == 64
+    assert entries[0].published_at_source is not None
 
 
 def test_reserved_x_connector_has_no_parser_or_network_contract():
