@@ -108,7 +108,16 @@ public class AiGovernanceController {
               coalesce(round(avg((retrieval_diagnostics->'stageTimingsMs'->>'citationRepair')::numeric)),0) avg_citation_repair_ms,
               coalesce(round(avg(citation_coverage)::numeric,3),0) avg_citation_coverage,
               coalesce(round(avg((retrieval_diagnostics->>'sourceCount')::numeric),2),0) avg_source_count,
-              coalesce(round(avg((retrieval_diagnostics->>'contextCount')::numeric),2),0) avg_context_count
+              coalesce(round(avg((retrieval_diagnostics->>'contextCount')::numeric),2),0) avg_context_count,
+              count(*) filter(where retrieval_diagnostics->>'conflictDetected'='true') conflict_runs,
+              (select count(*) from research.evidence_assessment ea join research.citation c on c.id=ea.citation_id
+                 join research.query_run qr on qr.id=c.query_run_id where qr.created_at>=now()-interval '24 hours') assessed_evidence,
+              (select count(*) from research.evidence_assessment ea join research.citation c on c.id=ea.citation_id
+                 join research.query_run qr on qr.id=c.query_run_id where qr.created_at>=now()-interval '24 hours' and ea.evidence_stance='REFUTES') refuting_evidence,
+              (select count(*) from research.evidence_assessment ea join research.citation c on c.id=ea.citation_id
+                 join research.query_run qr on qr.id=c.query_run_id where qr.created_at>=now()-interval '24 hours' and ea.evidence_stance='UNVERIFIED') unverified_evidence,
+              (select count(*) from research.evidence_assessment ea join research.citation c on c.id=ea.citation_id
+                 join research.query_run qr on qr.id=c.query_run_id where qr.created_at>=now()-interval '24 hours' and ea.freshness_status='OUTDATED') outdated_evidence
             from research.query_run where created_at>=now()-interval '24 hours'
             """);
         Map<String,Object> index=jdbc.queryForMap("""
@@ -147,6 +156,8 @@ public class AiGovernanceController {
         long mockPublic=jdbc.queryForObject("select count(*) from content.content_item where publication_status='PUBLISHED' and visibility='PUBLIC' and (provider_name is null or lower(provider_name) in ('mock','test','fixture'))",Long.class);
         long citations=jdbc.queryForObject("select count(*) from research.citation c join research.query_run q on q.id=c.query_run_id where q.created_at>=now()-interval '7 days' and c.support_status in ('SUPPORTED','UNSUPPORTED')",Long.class);
         long supported=jdbc.queryForObject("select count(*) from research.citation c join research.query_run q on q.id=c.query_run_id where q.created_at>=now()-interval '7 days' and c.support_status='SUPPORTED'",Long.class);
+        long assessedEvidence=jdbc.queryForObject("select count(*) from research.evidence_assessment ea join research.citation c on c.id=ea.citation_id join research.query_run q on q.id=c.query_run_id where q.created_at>=now()-interval '7 days'",Long.class);
+        long conflictRuns=jdbc.queryForObject("select count(*) from research.query_run where created_at>=now()-interval '7 days' and retrieval_diagnostics->>'conflictDetected'='true'",Long.class);
         long indexed=jdbc.queryForObject("select count(*) from knowledge.document where status='INDEXED'",Long.class);
         long aclLeaks=jdbc.queryForObject("""
             select count(*) from knowledge.document d join knowledge.dataset ds on ds.id=d.dataset_id
@@ -173,7 +184,7 @@ public class AiGovernanceController {
         long liveQueries=((Number)live.get("live_queries")).longValue();double avgCoverage=((Number)live.get("avg_citation_coverage")).doubleValue();double avgSources=((Number)live.get("avg_source_count")).doubleValue();
         int minimumCases=number(thresholds.get("minimumCases"),50); double minimumRecall=decimal(thresholds.get("recallAt20"),0.80); double minimumNdcg=decimal(thresholds.get("ndcgAt10"),0.70); double minimumCitationSupport=decimal(thresholds.get("citationSupport"),0.90);
         boolean passed=mockPublic==0&&aclLeaks<=number(thresholds.get("aclLeaks"),0)&&indexed>0&&cases.size()>=minimumCases&&recall>=minimumRecall&&ndcg>=minimumNdcg&&citationSupport>=minimumCitationSupport&&liveQueries>0&&avgCoverage>=0.80&&avgSources>=2;
-        Map<String,Object> metricMap=new java.util.LinkedHashMap<>();metricMap.put("caseCount",cases.size());metricMap.put("recallAt20",recall);metricMap.put("ndcgAt10",ndcg);metricMap.put("citationSupport",citationSupport);metricMap.put("citationCount",citations);metricMap.put("indexedDocuments",indexed);metricMap.put("mockPublic",mockPublic);metricMap.put("aclLeaks",aclLeaks);metricMap.put("liveQueries",liveQueries);metricMap.put("avgCitationCoverage",avgCoverage);metricMap.put("avgSourceCount",avgSources);metricMap.put("cases",caseResults);
+        Map<String,Object> metricMap=new java.util.LinkedHashMap<>();metricMap.put("caseCount",cases.size());metricMap.put("recallAt20",recall);metricMap.put("ndcgAt10",ndcg);metricMap.put("citationSupport",citationSupport);metricMap.put("citationCount",citations);metricMap.put("assessedEvidence",assessedEvidence);metricMap.put("conflictRuns",conflictRuns);metricMap.put("indexedDocuments",indexed);metricMap.put("mockPublic",mockPublic);metricMap.put("aclLeaks",aclLeaks);metricMap.put("liveQueries",liveQueries);metricMap.put("avgCitationCoverage",avgCoverage);metricMap.put("avgSourceCount",avgSources);metricMap.put("cases",caseResults);
         jdbc.update("insert into knowledge.evaluation_run(id,suite_id,status,provider_snapshot,metrics,passed,started_by,completed_at) values(?,?,'SUCCEEDED',?::jsonb,?::jsonb,?,?,now())",run,suite,toJson(runtime()),toJson(metricMap),passed,user.id());
         return Map.of("runId",run,"passed",passed,"metrics",metricMap);
     }
