@@ -3,6 +3,8 @@ package com.aihotspot.core.knowledge;
 import com.aihotspot.core.auth.AppUserPrincipal;
 import com.aihotspot.core.messaging.OutboxStore;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -242,7 +244,12 @@ public class AiGovernanceController {
         sql.append(" order by er.started_at desc limit ?");args.add(Math.max(1,Math.min(limit,100)));
         return jdbc.queryForList(sql.toString(),args.toArray());
     }
-    @PostMapping("/evaluations/run") public Map<String,Object> evaluate(@AuthenticationPrincipal AppUserPrincipal user){
+    @PostMapping("/evaluations/run") public Map<String,Object> evaluate(
+            @AuthenticationPrincipal AppUserPrincipal user,
+            @RequestParam(defaultValue="ALL") String split){
+        String requestedSplit=split.strip().toUpperCase();
+        if(!List.of("ALL","DEV","TEST","CANARY").contains(requestedSplit))
+            throw new IllegalArgumentException("split 必须为 ALL、DEV、TEST 或 CANARY");
         Map<String,Object> suiteRow=jdbc.queryForMap("select id,thresholds::text thresholds from knowledge.evaluation_suite where code='RAG_BASELINE_ZH'");
         UUID suite=(UUID)suiteRow.get("id"); Map<String,Object> thresholds=fromJson(String.valueOf(suiteRow.get("thresholds"))); UUID run=UUID.randomUUID();
         long mockPublic=jdbc.queryForObject("select count(*) from content.content_item where publication_status='PUBLISHED' and visibility='PUBLIC' and (provider_name is null or lower(provider_name) in ('mock','test','fixture'))",Long.class);
@@ -257,16 +264,33 @@ public class AiGovernanceController {
             where d.status='INDEXED' and ds.visibility='PUBLIC' and c.id is not null
               and not(c.publication_status='PUBLISHED' and c.visibility='PUBLIC')
             """,Long.class);
-        List<Map<String,Object>> cases=jdbc.queryForList("select case_key,input_data::text input_data,expected_data::text expected_data from knowledge.evaluation_case where suite_id=? order by case_key",suite);
-        int hits=0; double ndcgTotal=0; List<Map<String,Object>> caseResults=new java.util.ArrayList<>();
+        String caseSql="""
+            select case_key,input_data::text input_data,expected_data::text expected_data,
+              dataset_split,coalesce(tags[1],'untagged') scenario
+            from knowledge.evaluation_case
+            where suite_id=? and (?='ALL' or dataset_split=?)
+            order by dataset_split,case_key
+            """;
+        List<Map<String,Object>> cases=jdbc.queryForList(caseSql,suite,requestedSplit,requestedSplit);
+        int hits=0; double ndcgTotal=0; List<Map<String,Object>> caseResults=new ArrayList<>();
+        List<RagEvaluationScorer.CaseScore> scores=new ArrayList<>();
+        Map<String,List<RagEvaluationScorer.CaseScore>> splitScores=new LinkedHashMap<>();
+        Map<String,List<RagEvaluationScorer.CaseScore>> scenarioScores=new LinkedHashMap<>();
         for(Map<String,Object> test:cases){
             Map<String,Object> input=fromJson(String.valueOf(test.get("input_data"))); Map<String,Object> expected=fromJson(String.valueOf(test.get("expected_data")));
             String query=String.valueOf(input.get("query")); int topK=Math.max(1,Math.min(number(input.get("topK"),20),50));
             Map<String,Object> filters=input.get("filters") instanceof Map<?,?> raw?raw.entrySet().stream().collect(java.util.stream.Collectors.toMap(entry->String.valueOf(entry.getKey()),Map.Entry::getValue)):Map.of();
             List<Map<String,Object>> rows=research.evaluateRetrieval(user,query,filters,topK); RagEvaluationScorer.CaseScore score=RagEvaluationScorer.score(expected,rows);
-            if(score.passed())hits++; ndcgTotal+=score.ndcgGain(); caseResults.add(score.asMap(String.valueOf(test.get("case_key")),rows.size()));
+            if(score.passed())hits++; ndcgTotal+=score.ndcgGain();scores.add(score);
+            String caseSplit=String.valueOf(test.get("dataset_split"));
+            String scenario=String.valueOf(test.get("scenario"));
+            splitScores.computeIfAbsent(caseSplit,ignored->new ArrayList<>()).add(score);
+            scenarioScores.computeIfAbsent(scenario,ignored->new ArrayList<>()).add(score);
+            Map<String,Object> caseResult=score.asMap(String.valueOf(test.get("case_key")),rows.size());
+            caseResult.put("split",caseSplit);caseResult.put("scenario",scenario);caseResults.add(caseResult);
         }
         double recall=cases.isEmpty()?0:(double)hits/cases.size(); double ndcg=cases.isEmpty()?0:ndcgTotal/cases.size(); double citationSupport=citations==0?0:(double)supported/citations;
+        Map<String,Object> retrievalQuality=evaluationSummary(scores);
         Map<String,Object> live=jdbc.queryForMap("""
             select count(*) filter(where answer_status='SUCCEEDED') live_queries,
               coalesce(avg(citation_coverage) filter(where answer_status='SUCCEEDED'),0) avg_citation_coverage,
@@ -274,9 +298,34 @@ public class AiGovernanceController {
             from research.query_run where created_at>=now()-interval '7 days'
             """);
         long liveQueries=((Number)live.get("live_queries")).longValue();double avgCoverage=((Number)live.get("avg_citation_coverage")).doubleValue();double avgSources=((Number)live.get("avg_source_count")).doubleValue();
+        Map<String,Object> structured=jdbc.queryForMap("""
+            select count(*) filter(where retrieval_diagnostics ? 'structuredOutputValid') structured_samples,
+              count(*) filter(where retrieval_diagnostics->>'structuredOutputValid'='false') structured_failures
+            from research.query_run
+            where created_at>=now()-interval '7 days' and answer_status='SUCCEEDED'
+              and generation_provider is not null
+              and prompt_version=(
+                select version from knowledge.prompt_version
+                where task_type='RAG_GENERATION' and status='ACTIVE'
+                order by activated_at desc nulls last limit 1
+              )
+              and lower(generation_provider) not in ('mock','test','fixture','none','extractive-fallback')
+            """);
+        long structuredSamples=((Number)structured.get("structured_samples")).longValue();
+        long structuredFailures=((Number)structured.get("structured_failures")).longValue();
+        double structuredFailureRate=structuredSamples==0?0:(double)structuredFailures/structuredSamples;
         int minimumCases=number(thresholds.get("minimumCases"),50); double minimumRecall=decimal(thresholds.get("recallAt20"),0.80); double minimumNdcg=decimal(thresholds.get("ndcgAt10"),0.70); double minimumCitationSupport=decimal(thresholds.get("citationSupport"),0.90);
-        boolean passed=mockPublic==0&&aclLeaks<=number(thresholds.get("aclLeaks"),0)&&indexed>0&&cases.size()>=minimumCases&&recall>=minimumRecall&&ndcg>=minimumNdcg&&citationSupport>=minimumCitationSupport&&liveQueries>0&&avgCoverage>=0.80&&avgSources>=2;
-        Map<String,Object> metricMap=new java.util.LinkedHashMap<>();metricMap.put("caseCount",cases.size());metricMap.put("recallAt20",recall);metricMap.put("ndcgAt10",ndcg);metricMap.put("citationSupport",citationSupport);metricMap.put("citationCount",citations);metricMap.put("assessedEvidence",assessedEvidence);metricMap.put("conflictRuns",conflictRuns);metricMap.put("indexedDocuments",indexed);metricMap.put("mockPublic",mockPublic);metricMap.put("aclLeaks",aclLeaks);metricMap.put("liveQueries",liveQueries);metricMap.put("avgCitationCoverage",avgCoverage);metricMap.put("avgSourceCount",avgSources);metricMap.put("cases",caseResults);
+        int requiredCases="ALL".equals(requestedSplit)?minimumCases:1;
+        boolean passed=mockPublic==0&&aclLeaks<=number(thresholds.get("aclLeaks"),0)&&indexed>0
+                &&cases.size()>=requiredCases&&recall>=minimumRecall&&ndcg>=minimumNdcg
+                &&decimal(retrievalQuality.get("hitAt5"),0)>=decimal(thresholds.get("hitAt5"),0.90)
+                &&decimal(retrievalQuality.get("precisionAt8"),0)>=decimal(thresholds.get("precisionAt8"),0.75)
+                &&decimal(retrievalQuality.get("mrrAt10"),0)>=decimal(thresholds.get("mrrAt10"),0.85)
+                &&decimal(retrievalQuality.get("refusalAccuracy"),0)>=decimal(thresholds.get("refusalAccuracy"),0.95)
+                &&structuredFailureRate<=decimal(thresholds.get("structuredOutputFailureRate"),0.01)
+                &&citationSupport>=minimumCitationSupport&&liveQueries>0&&avgCoverage>=0.80&&avgSources>=2;
+        Map<String,Object> metricMap=new LinkedHashMap<>();metricMap.put("split",requestedSplit);metricMap.put("caseCount",cases.size());metricMap.put("recallAt20",recall);metricMap.put("ndcgAt10",ndcg);metricMap.putAll(retrievalQuality);metricMap.put("citationSupport",citationSupport);metricMap.put("citationCount",citations);metricMap.put("assessedEvidence",assessedEvidence);metricMap.put("conflictRuns",conflictRuns);metricMap.put("structuredOutputSamples",structuredSamples);metricMap.put("structuredOutputFailures",structuredFailures);metricMap.put("structuredOutputFailureRate",structuredFailureRate);metricMap.put("indexedDocuments",indexed);metricMap.put("mockPublic",mockPublic);metricMap.put("aclLeaks",aclLeaks);metricMap.put("liveQueries",liveQueries);metricMap.put("avgCitationCoverage",avgCoverage);metricMap.put("avgSourceCount",avgSources);
+        metricMap.put("bySplit",summaries(splitScores));metricMap.put("byScenario",summaries(scenarioScores));metricMap.put("cases",caseResults);
         jdbc.update("insert into knowledge.evaluation_run(id,suite_id,status,provider_snapshot,metrics,passed,started_by,completed_at) values(?,?,'SUCCEEDED',?::jsonb,?::jsonb,?,?,now())",run,suite,toJson(runtime()),toJson(metricMap),passed,user.id());
         return Map.of("runId",run,"passed",passed,"metrics",metricMap);
     }
@@ -284,6 +333,28 @@ public class AiGovernanceController {
     private static boolean isReal(Map<String,Object> provider){String name=String.valueOf(provider.getOrDefault("provider",""));return !name.isBlank()&&!List.of("mock","test","fixture").contains(name.toLowerCase());}
     private static int number(Object value,int fallback){if(value instanceof Number number)return number.intValue();try{return Integer.parseInt(String.valueOf(value));}catch(Exception ignored){return fallback;}}
     private static double decimal(Object value,double fallback){if(value instanceof Number number)return number.doubleValue();try{return Double.parseDouble(String.valueOf(value));}catch(Exception ignored){return fallback;}}
+    private static Map<String,Object> evaluationSummary(List<RagEvaluationScorer.CaseScore> scores){
+        long answerable=scores.stream().filter(score->!score.expectedNoEvidence()).count();
+        long noEvidence=scores.stream().filter(RagEvaluationScorer.CaseScore::expectedNoEvidence).count();
+        long hitAt5=scores.stream().filter(score->!score.expectedNoEvidence()&&score.hitAt5()).count();
+        long refused=scores.stream().filter(score->score.expectedNoEvidence()&&score.refused()).count();
+        double precision=scores.stream().filter(score->!score.expectedNoEvidence()).mapToDouble(RagEvaluationScorer.CaseScore::precisionAt8).average().orElse(0);
+        double mrr=scores.stream().filter(score->!score.expectedNoEvidence()).mapToDouble(RagEvaluationScorer.CaseScore::reciprocalRankAt10).average().orElse(0);
+        long passed=scores.stream().filter(RagEvaluationScorer.CaseScore::passed).count();
+        Map<String,Object> result=new LinkedHashMap<>();
+        result.put("passRate",scores.isEmpty()?0:(double)passed/scores.size());
+        result.put("hitAt5",answerable==0?1:(double)hitAt5/answerable);
+        result.put("precisionAt8",precision);
+        result.put("mrrAt10",mrr);
+        result.put("refusalAccuracy",noEvidence==0?1:(double)refused/noEvidence);
+        result.put("answerableCases",answerable);result.put("noEvidenceCases",noEvidence);
+        return result;
+    }
+    private static Map<String,Object> summaries(Map<String,List<RagEvaluationScorer.CaseScore>> groups){
+        Map<String,Object> result=new LinkedHashMap<>();
+        groups.forEach((name,scores)->result.put(name,evaluationSummary(scores)));
+        return result;
+    }
     @SuppressWarnings("unchecked") private Map<String,Object> fromJson(String value){try{return objectMapper.readValue(value,Map.class);}catch(Exception exception){return Map.of();}}
     private String toJson(Object value){try{return objectMapper.writeValueAsString(value);}catch(Exception exception){throw new IllegalStateException("无法创建重处理事件",exception);}}
 }

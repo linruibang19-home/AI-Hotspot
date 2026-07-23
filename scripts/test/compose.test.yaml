@@ -1,0 +1,41 @@
+services:
+  ai-test:
+    image: python:3.12-slim
+    working_dir: /workspace
+    volumes:
+      - ./services/ai:/workspace
+    command:
+      - sh
+      - -lc
+      - >-
+        pip install --quiet '.[dev]' &&
+        ruff check
+        src/ai_hotspot_ai/main.py
+        src/ai_hotspot_ai/schemas.py
+        src/ai_hotspot_ai/settings.py
+        src/ai_hotspot_ai/providers/base.py
+        src/ai_hotspot_ai/providers/factory.py
+        src/ai_hotspot_ai/providers/openai_compatible.py
+        src/ai_hotspot_ai/providers/remote.py
+        src/ai_hotspot_ai/providers/resilience.py
+        tests/test_api.py
+        tests/test_provider_resilience.py &&
+        pytest -q
+
+  core-test:
+    image: maven:3.9.11-eclipse-temurin-17
+    working_dir: /workspace
+    volumes:
+      - ./services/core:/workspace
+      - core-test-maven-cache:/root/.m2
+    command: mvn -B test
+
+  web-test:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: validation
+    command: ["true"]
+
+volumes:
+  core-test-maven-cache:

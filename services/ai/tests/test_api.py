@@ -23,7 +23,13 @@ async def test_mock_provider_flow_is_deterministic() -> None:
     providers = (await request("GET", "/api/v1/providers")).json()
     first = (await request("POST", "/api/v1/mock/embed", json={"texts": ["AI Hotspot"]})).json()
     second = (await request("POST", "/api/v1/mock/embed", json={"texts": ["AI Hotspot"]})).json()
-    generated = (await request("POST", "/api/v1/mock/generate", json={"prompt": "生成摘要", "max_tokens": 256})).json()
+    generated = (
+        await request(
+            "POST",
+            "/api/v1/mock/generate",
+            json={"prompt": "生成摘要", "max_tokens": 256},
+        )
+    ).json()
 
     assert providers["generation"]["provider"] == "mock"
     assert first["vectors"] == second["vectors"]
@@ -31,6 +37,22 @@ async def test_mock_provider_flow_is_deterministic() -> None:
     assert generated["text"].startswith("[Mock Provider]")
     assert "input_tokens" in generated
     assert "output_tokens" in generated
+
+
+async def test_generate_accepts_versioned_prompt_layers() -> None:
+    response = await request(
+        "POST",
+        "/api/v1/mock/generate",
+        json={
+            "system_prompt": "只依据证据回答",
+            "user_prompt": "回答问题",
+            "evidence": "[1] 测试证据",
+            "max_tokens": 256,
+        },
+    )
+
+    assert response.status_code == 200
+    assert "只依据证据回答" in response.json()["text"]
 
 
 async def test_mock_rerank_orders_by_overlap() -> None:

@@ -2088,7 +2088,7 @@ html[data-theme="dark"] .detail-summary { color: #afbec3; }
 .evaluation-list article { display: grid; grid-template-columns: minmax(220px,1fr) minmax(420px,1.5fr); gap: 18px; padding: 13px 14px; align-items: center; border: 1px solid var(--border); border-radius: 10px; }
 .evaluation-list article > div { display: grid; grid-template-columns: auto 1fr; gap: 4px 9px; align-items: center; }
 .evaluation-list article small { grid-column: 2; color: var(--muted); font-size: 8px; }
-.evaluation-list dl { display: grid; grid-template-columns: repeat(5,1fr); margin: 0; }
+.evaluation-list dl { display: grid; grid-template-columns: repeat(7,1fr); margin: 0; }
 .evaluation-list dl div { display: grid; gap: 3px; text-align: right; }
 .evaluation-list dt { color: var(--subtle); font-size: 7px; }
 .evaluation-list dd { margin: 0; font-family: ui-monospace,monospace; font-size: 9px; font-weight: 750; }

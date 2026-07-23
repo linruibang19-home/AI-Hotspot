@@ -26,6 +26,9 @@ class RagEvaluationScorerTests {
         assertThat(score.firstRelevantRank()).isEqualTo(1);
         assertThat(score.distinctSources()).isEqualTo(2);
         assertThat(score.ndcgGain()).isEqualTo(1.0);
+        assertThat(score.hitAt5()).isTrue();
+        assertThat(score.precisionAt8()).isEqualTo(1.0);
+        assertThat(score.reciprocalRankAt10()).isEqualTo(1.0);
     }
 
     @Test
@@ -51,6 +54,8 @@ class RagEvaluationScorerTests {
 
         assertThat(score.passed()).isTrue();
         assertThat(score.ndcgGain()).isEqualTo(1.0);
+        assertThat(score.expectedNoEvidence()).isTrue();
+        assertThat(score.refused()).isTrue();
     }
 
     @Test

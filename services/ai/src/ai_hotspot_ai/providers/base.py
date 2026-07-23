@@ -23,9 +23,15 @@ class GenerationProvider(ABC):
     async def generate(self, prompt: str, max_tokens: int | None = None) -> str: ...
 
     async def generate_with_usage(
-        self, prompt: str, max_tokens: int | None = None
+        self,
+        prompt: str,
+        max_tokens: int | None = None,
+        *,
+        system_prompt: str | None = None,
+        evidence: str | None = None,
     ) -> GenerationOutput:
-        return GenerationOutput(text=await self.generate(prompt, max_tokens))
+        parts = [value for value in (system_prompt, prompt, evidence) if value]
+        return GenerationOutput(text=await self.generate("\n\n".join(parts), max_tokens))
 
 
 class EmbeddingProvider(ABC):

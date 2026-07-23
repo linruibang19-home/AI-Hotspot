@@ -1,9 +1,18 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class GenerateRequest(BaseModel):
-    prompt: str = Field(min_length=1, max_length=20_000)
+    prompt: str | None = Field(default=None, min_length=1, max_length=20_000)
+    system_prompt: str | None = Field(default=None, min_length=1, max_length=20_000)
+    user_prompt: str | None = Field(default=None, min_length=1, max_length=20_000)
+    evidence: str | None = Field(default=None, min_length=1, max_length=40_000)
     max_tokens: int | None = Field(default=None, ge=64, le=2_000)
+
+    @model_validator(mode="after")
+    def require_prompt(self):
+        if not self.prompt and not self.user_prompt:
+            raise ValueError("prompt or user_prompt is required")
+        return self
 
 
 class GenerateResponse(BaseModel):

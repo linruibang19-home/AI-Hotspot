@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from . import __version__
 from .providers import ProviderRegistry, get_provider_registry
+from .providers.resilience import ProviderError
 from .schemas import (
     EmbeddingRequest,
     EmbeddingResponse,
@@ -54,6 +55,22 @@ async def runtime_error_handler(request: Request, exception: RuntimeError):
     )
 
 
+@app.exception_handler(ProviderError)
+async def provider_error_handler(request: Request, exception: ProviderError):
+    status_code = 504 if exception.code.endswith("_TIMEOUT") else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "code": exception.code,
+            "capability": exception.capability,
+            "retryable": exception.retryable,
+            "attempts": exception.attempts,
+            "detail": str(exception),
+            "correlationId": request.state.correlation_id,
+        },
+    )
+
+
 def _settings(request: Request) -> Settings:
     return request.app.state.settings
 
@@ -88,7 +105,12 @@ async def providers(request: Request):
 @app.post("/api/v1/mock/generate", response_model=GenerateResponse, include_in_schema=False)
 async def generate(payload: GenerateRequest, request: Request):
     provider = _providers(request).generation
-    output = await provider.generate_with_usage(payload.prompt, payload.max_tokens)
+    output = await provider.generate_with_usage(
+        payload.user_prompt or payload.prompt or "",
+        payload.max_tokens,
+        system_prompt=payload.system_prompt,
+        evidence=payload.evidence,
+    )
     return GenerateResponse(
         text=output.text,
         provider=provider.name,

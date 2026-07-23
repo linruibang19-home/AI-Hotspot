@@ -24,12 +24,14 @@ final class RagEvaluationScorer {
                 .reduce("", (left, right) -> left + "\n" + right);
 
         int firstRelevant = 0;
+        int relevantAt8 = 0;
         if (!expectNoEvidence) {
             for (int index = 0; index < rows.size(); index++) {
                 String text = searchableText(rows.get(index));
-                if (anyTerms.isEmpty() || anyTerms.stream().anyMatch(text::contains)) {
-                    firstRelevant = index + 1;
-                    break;
+                boolean relevant = anyTerms.isEmpty() || anyTerms.stream().anyMatch(text::contains);
+                if (relevant) {
+                    if (firstRelevant == 0) firstRelevant = index + 1;
+                    if (index < 8) relevantAt8++;
                 }
             }
         }
@@ -73,7 +75,16 @@ final class RagEvaluationScorer {
         boolean passed = violations.isEmpty();
         double gain = !passed ? 0.0 : expectNoEvidence ? 1.0
                 : 1.0 / (Math.log(firstRelevant + 1) / Math.log(2));
-        return new CaseScore(passed, firstRelevant, gain, distinctSources, List.copyOf(violations));
+        boolean refused = expectNoEvidence && rows.isEmpty();
+        boolean hitAt5 = !expectNoEvidence && firstRelevant > 0 && firstRelevant <= 5;
+        int precisionDenominator = Math.min(8, rows.size());
+        double precisionAt8 = expectNoEvidence ? 0.0
+                : precisionDenominator == 0 ? 0.0 : (double) relevantAt8 / precisionDenominator;
+        double reciprocalRank = !expectNoEvidence && firstRelevant > 0 && firstRelevant <= 10
+                ? 1.0 / firstRelevant : 0.0;
+        return new CaseScore(
+                passed, firstRelevant, gain, distinctSources, List.copyOf(violations),
+                hitAt5, precisionAt8, reciprocalRank, expectNoEvidence, refused);
     }
 
     private static String searchableText(Map<String,Object> row) {
@@ -105,7 +116,8 @@ final class RagEvaluationScorer {
     }
 
     record CaseScore(boolean passed, int firstRelevantRank, double ndcgGain, long distinctSources,
-                     List<String> violations) {
+                     List<String> violations, boolean hitAt5, double precisionAt8,
+                     double reciprocalRankAt10, boolean expectedNoEvidence, boolean refused) {
         Map<String,Object> asMap(String caseKey, int candidates) {
             Map<String,Object> result = new LinkedHashMap<>();
             result.put("caseKey", caseKey);
@@ -113,6 +125,11 @@ final class RagEvaluationScorer {
             result.put("firstRelevantRank", firstRelevantRank);
             result.put("candidates", candidates);
             result.put("distinctSources", distinctSources);
+            result.put("hitAt5", hitAt5);
+            result.put("precisionAt8", precisionAt8);
+            result.put("reciprocalRankAt10", reciprocalRankAt10);
+            result.put("expectedNoEvidence", expectedNoEvidence);
+            result.put("refused", refused);
             result.put("violations", violations);
             return result;
         }

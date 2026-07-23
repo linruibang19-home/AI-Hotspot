@@ -20,16 +20,26 @@ class Settings(BaseSettings):
     generation_base_url: str | None = None
     generation_model: str = "deepseek-v4-flash"
     generation_api_key: str | None = None
+    generation_connect_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    generation_read_timeout_seconds: float = Field(default=35.0, gt=0, le=120)
+    generation_total_timeout_seconds: float = Field(default=40.0, gt=0, le=180)
 
     embedding_provider: Literal["mock", "remote"] = "mock"
     embedding_base_url: str | None = None
     embedding_model: str = "BAAI/bge-m3"
     embedding_api_key: str | None = None
+    embedding_connect_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    embedding_read_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+    embedding_total_timeout_seconds: float = Field(default=20.0, gt=0, le=180)
 
     rerank_provider: Literal["mock", "remote"] = "mock"
     rerank_base_url: str | None = None
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     rerank_api_key: str | None = None
+    rerank_connect_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    rerank_read_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+    rerank_total_timeout_seconds: float = Field(default=20.0, gt=0, le=180)
+    provider_retry_attempts: int = Field(default=1, ge=0, le=1)
 
     database_url: str = "postgresql+psycopg://ai_hotspot:ai_hotspot@localhost:5432/ai_hotspot"
     redis_url: str = "redis://localhost:6379/0"
