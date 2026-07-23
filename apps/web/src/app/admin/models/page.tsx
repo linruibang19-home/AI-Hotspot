@@ -47,7 +47,7 @@ export default function AdminModelsPage() {
 
     <section className="rag-kpi-strip" aria-label="RAG 核心指标">
       <Kpi value={metrics?.rag.rag_queries??0} label="研究查询" meta={`${metrics?.rag.succeeded??0} 次成功`} />
-      <Kpi value={`${formatNumber(metrics?.rag.p95_latency_ms)} ms`} label="P95 总延迟" meta="目标 ≤ 12,000 ms" state={(metrics?.rag.p95_latency_ms??0)<=12000?"good":"warn"} />
+      <Kpi value={`${formatNumber(metrics?.rag.comparable_p95_latency_ms??metrics?.rag.p95_latency_ms)} ms`} label="P95 可比延迟" meta={`${formatNumber(metrics?.rag.comparable_queries)} 个当前配置样本 · 全窗口 ${formatNumber(metrics?.rag.p95_latency_ms)} ms`} state={(metrics?.rag.comparable_p95_latency_ms??metrics?.rag.p95_latency_ms??0)<=12000?"good":"warn"} />
       <Kpi value={`${Math.round((metrics?.rag.avg_citation_coverage??0)*100)}%`} label="引用覆盖" meta={`${formatNumber(metrics?.rag.avg_source_count,1)} 个平均信源`} state={(metrics?.rag.avg_citation_coverage??0)>=.8?"good":"warn"} />
       <Kpi value={`${formatNumber(metrics?.summary.failure_rate,2)}%`} label="Provider 错误率" meta={`${metrics?.summary.failures??0} / ${metrics?.summary.calls??0} 次`} state={(metrics?.summary.failures??0)===0?"good":"warn"} />
       <Kpi value={metrics?.costConfigured?formatCost(metrics?.summary.estimated_cost):"待配置"} label="估算成本" meta={metrics?.costConfigured?`${formatNumber((metrics?.summary.input_tokens??0)+(metrics?.summary.output_tokens??0))} tokens`:"需配置每百万 Token 单价"} />

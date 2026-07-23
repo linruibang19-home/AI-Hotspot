@@ -195,6 +195,7 @@ def finish_not_modified(context: FetchContext, response: FetchResponse) -> None:
             """,
             (response.etag, response.last_modified, context.endpoint_id),
         )
+        _reconcile_endpoint_dead_letters(cursor, context.endpoint_id)
 
 
 def persist_feed(
@@ -421,7 +422,22 @@ def persist_feed(
                 context.endpoint_id,
             ),
         )
+        _reconcile_endpoint_dead_letters(cursor, context.endpoint_id)
     return artifact_id, content_ids
+
+
+def _reconcile_endpoint_dead_letters(cursor: psycopg.Cursor, endpoint_id: uuid.UUID) -> None:
+    """Keep recovered crawl failures auditable without blocking readiness."""
+    cursor.execute(
+        """
+        update messaging.dead_letter_record
+        set replay_status = 'IGNORED'
+        where replay_status = 'PENDING'
+          and event_type = 'source.crawl.requested'
+          and payload #>> '{payload,endpointId}' = %s
+        """,
+        (str(endpoint_id),),
+    )
 
 
 def _append_content_events(cursor: psycopg.Cursor, context: FetchContext, rows: list[dict]) -> None:

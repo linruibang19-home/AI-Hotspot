@@ -109,8 +109,32 @@ public class AiGovernanceController {
             select count(*) rag_queries,
               count(*) filter(where answer_status='SUCCEEDED') succeeded,
               count(*) filter(where answer_status='NO_EVIDENCE') no_evidence,
-              coalesce(round(avg(latency_ms) filter(where latency_ms is not null)),0) avg_latency_ms,
-              coalesce(round((percentile_cont(0.95) within group(order by latency_ms) filter(where latency_ms is not null))::numeric),0) p95_latency_ms,
+              count(*) filter(where answer_status='SUCCEEDED'
+                and retrieval_config->>'lexicalLimit'='64'
+                and retrieval_config->>'vectorLimit'='64'
+                and retrieval_config->>'rerankLimit'='32'
+                and retrieval_config->>'contextLimit'='8'
+                and retrieval_diagnostics->'stageTimingsMs' is not null) comparable_queries,
+              count(*) filter(where answer_status='SUCCEEDED') - count(*) filter(
+                where answer_status='SUCCEEDED'
+                and retrieval_config->>'lexicalLimit'='64'
+                and retrieval_config->>'vectorLimit'='64'
+                and retrieval_config->>'rerankLimit'='32'
+                and retrieval_config->>'contextLimit'='8'
+                and retrieval_diagnostics->'stageTimingsMs' is not null) legacy_queries,
+              coalesce(round(avg(latency_ms) filter(
+                where latency_ms is not null and answer_status='SUCCEEDED')),0) avg_latency_ms,
+              coalesce(round((percentile_cont(0.95) within group(order by latency_ms) filter(
+                where latency_ms is not null and answer_status='SUCCEEDED'))::numeric),0) p95_latency_ms,
+              coalesce(round((percentile_cont(0.95) within group(order by latency_ms) filter(
+                where latency_ms is not null
+                  and answer_status='SUCCEEDED'
+                  and retrieval_config->>'lexicalLimit'='64'
+                  and retrieval_config->>'vectorLimit'='64'
+                  and retrieval_config->>'rerankLimit'='32'
+                  and retrieval_config->>'contextLimit'='8'
+                  and retrieval_diagnostics->'stageTimingsMs' is not null
+              ))::numeric),0) comparable_p95_latency_ms,
               coalesce(round(avg((retrieval_diagnostics->'stageTimingsMs'->>'embedding')::numeric)),0) avg_embedding_ms,
               coalesce(round((percentile_cont(0.95) within group(order by (retrieval_diagnostics->'stageTimingsMs'->>'embedding')::numeric) filter(where retrieval_diagnostics->'stageTimingsMs'->>'embedding' is not null))::numeric),0) p95_embedding_ms,
               coalesce(round(avg((retrieval_diagnostics->'stageTimingsMs'->>'hybridRetrieval')::numeric)),0) avg_retrieval_ms,
