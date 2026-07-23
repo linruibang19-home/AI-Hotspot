@@ -1,0 +1,15 @@
+services:
+  k6:
+    image: grafana/k6:2.0.0
+    working_dir: /work
+    environment:
+      BASE_URL: http://nginx
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+    volumes:
+      - ./scripts/load:/work:ro
+      - ./artifacts/load:/artifacts
+    networks: [frontend, backend]
+    depends_on:
+      nginx:
+        condition: service_started
