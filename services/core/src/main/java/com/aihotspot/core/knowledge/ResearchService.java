@@ -132,7 +132,7 @@ public class ResearchService {
             diagnostics.put("noEvidenceReason",noEvidenceReason(plan,candidates,reranked));
             jdbc.update("update research.query_run set answer_status='NO_EVIDENCE',answer=?,candidate_count=0,citation_count=0,latency_ms=?,retrieval_diagnostics=?::jsonb,completed_at=now() where id=?",
                     noEvidence, Duration.between(started,Instant.now()).toMillis(), json(diagnostics), runId);
-            return new ResearchResult(runId,sessionId,noEvidence,"NO_EVIDENCE","none",List.of(),Duration.between(started,Instant.now()).toMillis(),diagnostics,null);
+            return new ResearchResult(runId,sessionId,noEvidence,"NO_EVIDENCE","none",List.of(),Duration.between(started,Instant.now()).toMillis(),diagnostics,0,0,BigDecimal.ZERO,null);
         }
 
         Provider provider = provider();
@@ -185,7 +185,9 @@ public class ResearchService {
         jdbc.update("update research.query_run set answer_status='SUCCEEDED',answer=?,generation_provider=?,generation_model=?,candidate_count=?,citation_count=?,latency_ms=?,retrieval_diagnostics=?::jsonb,citation_coverage=?,completed_at=now() where id=?",
                 answer,provider.name,provider.model,candidates.size(),citations.size(),latency,json(diagnostics),coverage,runId);
         jdbc.update("update research.session set updated_at=now() where id=?",sessionId);
-        return new ResearchResult(runId,sessionId,answer,"SUCCEEDED",provider.name,citations,latency,diagnostics,null);
+        return new ResearchResult(runId,sessionId,answer,"SUCCEEDED",provider.name,citations,latency,
+                diagnostics,generated.inputTokens(),generated.outputTokens(),
+                estimatedGenerationCost(generated.inputTokens(),generated.outputTokens()),null);
     }
 
     private UUID ensureSession(AppUserPrincipal user, UUID requested, String question) {
@@ -509,6 +511,7 @@ public class ResearchService {
     public record ResearchSessionView(ResearchSessionSummary session,List<ResearchTurn> turns){}
     public record ResearchResult(UUID runId,UUID sessionId,String answer,String answerStatus,
                                  String generationProvider,List<Citation> citations,long latencyMs,
-                                 Map<String,Object> diagnostics,
+                                 Map<String,Object> diagnostics,int inputTokens,int outputTokens,
+                                 BigDecimal estimatedCost,
                                  ResearchFeedbackService.Feedback feedback){}
 }

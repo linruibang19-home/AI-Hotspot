@@ -120,6 +120,10 @@ test("M7-M10 workspaces use real APIs and expose governance", () => {
   assert.match(workspaces, /conflictDetected/);
   assert.match(workspaces, /\/subscriptions/);
   assert.match(workspaces, /\/agents\/runs/);
+  assert.match(workspaces, /\/agents\/runs\/\$\{run\.id\}\/cancel/);
+  assert.match(workspaces, /\/agents\/runs\/\$\{run\.id\}\/retry/);
+  assert.match(workspaces, /安全重试/);
+  assert.match(workspaces, /执行步骤/);
   assert.match(models, /\/admin\/ai\/evaluations\/run/);
   assert.match(models, /\/admin\/ai\/reindex/);
   assert.match(models, /\/admin\/ai\/metrics\?hours=/);

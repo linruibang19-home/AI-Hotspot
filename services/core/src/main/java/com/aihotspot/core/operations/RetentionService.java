@@ -19,7 +19,6 @@ public class RetentionService {
         jdbc.update("delete from iam.email_verification_challenge where created_at < now() - interval '7 days'");
         jdbc.update("delete from knowledge.provider_metric where recorded_at < now() - interval '180 days'");
         jdbc.update("update automation.tool_call set arguments='{}'::jsonb where created_at < now() - interval '90 days' and arguments <> '{}'::jsonb");
-        jdbc.update("update automation.approval_request set status='EXPIRED' where status='PENDING' and expires_at <= now()");
         jdbc.update("""
             update messaging.dead_letter_record d
             set replay_status='IGNORED'
