@@ -13,6 +13,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,10 +31,13 @@ import tools.jackson.databind.ObjectMapper;
 @PreAuthorize("hasAuthority('ai-config:manage')")
 public class AiGovernanceController {
     private final JdbcTemplate jdbc; private final KnowledgeIndexService indexer; private final ResearchService research;
+    private final ResearchFeedbackService feedback;
     private final OutboxStore outbox; private final ObjectMapper objectMapper; private final RestClient ai;
-    public AiGovernanceController(JdbcTemplate jdbc,KnowledgeIndexService indexer,ResearchService research,OutboxStore outbox,ObjectMapper objectMapper,
+    public AiGovernanceController(JdbcTemplate jdbc,KnowledgeIndexService indexer,ResearchService research,
+            ResearchFeedbackService feedback,OutboxStore outbox,ObjectMapper objectMapper,
             @Value("${ai-hotspot.ai-base-url}") String aiBaseUrl){
-        this.jdbc=jdbc;this.indexer=indexer;this.research=research;this.outbox=outbox;this.objectMapper=objectMapper;
+        this.jdbc=jdbc;this.indexer=indexer;this.research=research;this.feedback=feedback;
+        this.outbox=outbox;this.objectMapper=objectMapper;
         this.ai=RestClient.builder().baseUrl(aiBaseUrl).requestFactory(new SimpleClientHttpRequestFactory()).build();
     }
     @GetMapping("/configs") public List<Map<String,Object>> configs(){return jdbc.queryForList("select id,task_type,provider_name,model_name,base_url,credential_ref,status,timeout_ms,parameters::text parameters,updated_at from knowledge.provider_config order by task_type");}
@@ -211,8 +215,16 @@ public class AiGovernanceController {
         result.put("summary",summary);result.put("rag",rag);result.put("index",index);
         result.put("providerBreakdown",providerBreakdown);result.put("latencyTrend",latencyTrend);
         result.put("noEvidenceReasons",noEvidenceReasons);result.put("slowQueries",slowQueries);
+        result.put("feedbackSummary",feedback.summary(windowHours));
+        result.put("feedbackSamples",feedback.samples(windowHours,30));
         result.put("costConfigured",costConfigured);result.put("recent",recent);
         return result;
+    }
+    @PutMapping("/feedback/{feedbackId}")
+    public ResearchFeedbackService.Feedback triageFeedback(
+            @PathVariable UUID feedbackId,@RequestBody FeedbackTriageRequest body,
+            @AuthenticationPrincipal AppUserPrincipal user){
+        return feedback.triage(user.id(),feedbackId,body.status());
     }
     @GetMapping("/runtime") @SuppressWarnings("unchecked") public Map<String,Object> runtime(){
         Map<String,Object> providers=ai.get().uri("/api/v1/providers").retrieve().body(Map.class);
@@ -330,6 +342,7 @@ public class AiGovernanceController {
         return Map.of("runId",run,"passed",passed,"metrics",metricMap);
     }
     public record ConfigRequest(String taskType,String providerName,String modelName,String baseUrl,String credentialRef,String status,Integer timeoutMs,String parametersJson){}
+    public record FeedbackTriageRequest(String status){}
     private static boolean isReal(Map<String,Object> provider){String name=String.valueOf(provider.getOrDefault("provider",""));return !name.isBlank()&&!List.of("mock","test","fixture").contains(name.toLowerCase());}
     private static int number(Object value,int fallback){if(value instanceof Number number)return number.intValue();try{return Integer.parseInt(String.valueOf(value));}catch(Exception ignored){return fallback;}}
     private static double decimal(Object value,double fallback){if(value instanceof Number number)return number.doubleValue();try{return Double.parseDouble(String.valueOf(value));}catch(Exception ignored){return fallback;}}

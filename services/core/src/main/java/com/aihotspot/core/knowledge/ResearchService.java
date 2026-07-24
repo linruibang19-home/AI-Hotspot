@@ -34,9 +34,12 @@ public class ResearchService {
     private static final double MIN_CITATION_COVERAGE = 0.80;
     private final JdbcTemplate jdbc;
     private final RestClient ai;
+    private final ResearchFeedbackService feedback;
 
-    public ResearchService(JdbcTemplate jdbc, @Value("${ai-hotspot.ai-base-url}") String aiBaseUrl) {
+    public ResearchService(JdbcTemplate jdbc, ResearchFeedbackService feedback,
+                           @Value("${ai-hotspot.ai-base-url}") String aiBaseUrl) {
         this.jdbc = jdbc;
+        this.feedback = feedback;
         this.ai = RestClient.builder().baseUrl(aiBaseUrl).requestFactory(new SimpleClientHttpRequestFactory()).build();
     }
 
@@ -85,7 +88,8 @@ public class ResearchService {
                         rs.getString("answer_status"),rs.getString("generation_provider"),
                         citations(runId),rs.getLong("latency_ms"),
                         jsonMap(rs.getObject("retrieval_diagnostics")),
-                        rs.getObject("created_at",OffsetDateTime.class));
+                        rs.getObject("created_at",OffsetDateTime.class),
+                        feedback.findForRun(userId,runId));
             },sessionId,userId);
         return new ResearchSessionView(summaries.get(0),turns);
     }
@@ -128,7 +132,7 @@ public class ResearchService {
             diagnostics.put("noEvidenceReason",noEvidenceReason(plan,candidates,reranked));
             jdbc.update("update research.query_run set answer_status='NO_EVIDENCE',answer=?,candidate_count=0,citation_count=0,latency_ms=?,retrieval_diagnostics=?::jsonb,completed_at=now() where id=?",
                     noEvidence, Duration.between(started,Instant.now()).toMillis(), json(diagnostics), runId);
-            return new ResearchResult(runId,sessionId,noEvidence,"NO_EVIDENCE","none",List.of(),Duration.between(started,Instant.now()).toMillis(),diagnostics);
+            return new ResearchResult(runId,sessionId,noEvidence,"NO_EVIDENCE","none",List.of(),Duration.between(started,Instant.now()).toMillis(),diagnostics,null);
         }
 
         Provider provider = provider();
@@ -181,7 +185,7 @@ public class ResearchService {
         jdbc.update("update research.query_run set answer_status='SUCCEEDED',answer=?,generation_provider=?,generation_model=?,candidate_count=?,citation_count=?,latency_ms=?,retrieval_diagnostics=?::jsonb,citation_coverage=?,completed_at=now() where id=?",
                 answer,provider.name,provider.model,candidates.size(),citations.size(),latency,json(diagnostics),coverage,runId);
         jdbc.update("update research.session set updated_at=now() where id=?",sessionId);
-        return new ResearchResult(runId,sessionId,answer,"SUCCEEDED",provider.name,citations,latency,diagnostics);
+        return new ResearchResult(runId,sessionId,answer,"SUCCEEDED",provider.name,citations,latency,diagnostics,null);
     }
 
     private UUID ensureSession(AppUserPrincipal user, UUID requested, String question) {
@@ -500,7 +504,11 @@ public class ResearchService {
                                          String latestAnswerStatus,int queryCount){}
     public record ResearchTurn(UUID runId,String question,String answer,String answerStatus,
                                String generationProvider,List<Citation> citations,long latencyMs,
-                               Map<String,Object> diagnostics,OffsetDateTime createdAt){}
+                               Map<String,Object> diagnostics,OffsetDateTime createdAt,
+                               ResearchFeedbackService.Feedback feedback){}
     public record ResearchSessionView(ResearchSessionSummary session,List<ResearchTurn> turns){}
-    public record ResearchResult(UUID runId,UUID sessionId,String answer,String answerStatus,String generationProvider,List<Citation> citations,long latencyMs,Map<String,Object> diagnostics){}
+    public record ResearchResult(UUID runId,UUID sessionId,String answer,String answerStatus,
+                                 String generationProvider,List<Citation> citations,long latencyMs,
+                                 Map<String,Object> diagnostics,
+                                 ResearchFeedbackService.Feedback feedback){}
 }

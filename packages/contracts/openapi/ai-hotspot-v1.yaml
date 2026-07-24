@@ -631,6 +631,22 @@ paths:
       responses:
         "200": { description: RAG 回答、引用与诊断, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
         "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/v1/research/runs/{runId}/feedback:
+    post:
+      tags: [Research]
+      operationId: submitResearchFeedback
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: runId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResearchFeedbackRequest" }
+      responses:
+        "200": { description: 已保存的回答评价, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+        "400": { description: 回答不存在、不属于当前用户或反馈分类无效, content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
   /api/v1/agents/definitions:
     get:
       tags: [Agents]
@@ -938,6 +954,22 @@ paths:
         - { name: hours, in: query, schema: { type: integer, default: 24, minimum: 1, maximum: 168 } }
       responses:
         "200": { description: Provider、RAG 阶段、慢查询、成本和索引指标, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/ai/feedback/{feedbackId}:
+    put:
+      tags: [AiAdmin]
+      operationId: triageResearchFeedback
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: feedbackId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResearchFeedbackTriageRequest" }
+      responses:
+        "200": { description: 更新后的反馈样本状态, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+        "400": { description: 反馈不存在或状态无效, content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
   /api/v1/admin/ai/runtime:
     get:
       tags: [AiAdmin]
@@ -1080,6 +1112,23 @@ components:
         sessionId: { type: [string, "null"], format: uuid }
         question: { type: string, minLength: 1 }
         filters: { type: object, additionalProperties: true }
+    ResearchFeedbackRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating: { type: string, enum: [HELPFUL, UNHELPFUL] }
+        issueCategories:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [IRRELEVANT, MISSING_EVIDENCE, OUTDATED, INCORRECT, INCOMPLETE, CITATION_MISMATCH, TOO_VERBOSE, OTHER]
+        comment: { type: [string, "null"], maxLength: 1000 }
+    ResearchFeedbackTriageRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [TRIAGED, EVAL_CANDIDATE, RESOLVED, DISMISSED] }
     AgentStartRequest:
       type: object
       required: [agentCode, objective]
