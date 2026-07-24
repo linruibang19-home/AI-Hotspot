@@ -5,13 +5,13 @@ import os
 import aio_pika
 from aio_pika import DeliveryMode, ExchangeType
 
+from ai_hotspot_ai.content_repository import mark_content_failure
 from ai_hotspot_ai.feed import FeedError
 from ai_hotspot_ai.pipeline import process_content_event, process_crawl_event
 from ai_hotspot_ai.repository import (
     CONTENT_CONSUMER,
     CRAWL_CONSUMER,
     fail_inbox,
-    mark_content_failure,
     mark_fetch_failure,
 )
 from ai_hotspot_ai.settings import get_settings

@@ -3,21 +3,23 @@ import hashlib
 
 from ai_hotspot_ai.connectors import accept_header, parse_connector
 from ai_hotspot_ai.content_analysis import analyze_content
+from ai_hotspot_ai.content_repository import (
+    finish_content,
+    finish_mock_content,
+    load_content,
+)
 from ai_hotspot_ai.feed import FetchRequest, fetch_feed
 from ai_hotspot_ai.providers.factory import get_provider_registry
 from ai_hotspot_ai.repository import (
     CONTENT_CONSUMER,
     CRAWL_CONSUMER,
-    AlreadyCompleted,
     begin_inbox,
     complete_inbox,
-    finish_content,
-    finish_mock_content,
     finish_not_modified,
-    load_content,
     persist_feed,
     start_fetch,
 )
+from ai_hotspot_ai.repository_common import AlreadyCompleted
 from ai_hotspot_ai.settings import Settings
 from ai_hotspot_ai.storage import ArtifactStore
 
@@ -135,8 +137,12 @@ def process_content_event(payload: dict[str, object], settings: Settings) -> dic
         provider_model=registry.generation.model,
         # Mock remains available for deterministic tests, but it is never allowed
         # to cross the public publication gate.
-        relevance_threshold=101.0 if registry.generation.name == "mock" else settings.content_relevance_threshold,
-        quality_threshold=101.0 if registry.generation.name == "mock" else settings.content_quality_threshold,
+        relevance_threshold=101.0
+        if registry.generation.name == "mock"
+        else settings.content_relevance_threshold,
+        quality_threshold=101.0
+        if registry.generation.name == "mock"
+        else settings.content_quality_threshold,
     )
     result = {
         "published": published,

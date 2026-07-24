@@ -28,7 +28,11 @@ public interface CrawlMapper {
 
     DeadLetterView findDeadLetter(@Param("id") UUID id);
 
+    DeadLetterReplayView findDeadLetterForReplay(@Param("id") UUID id);
+
     int resetJobForReplay(@Param("id") UUID id);
+
+    int resetContentForReplay(@Param("id") UUID id);
 
     int markDeadLetterReplayed(
             @Param("id") UUID id,
@@ -99,4 +103,15 @@ public interface CrawlMapper {
             Instant firstFailedAt,
             Instant lastFailedAt,
             Instant createdAt) {}
+
+    record DeadLetterReplayView(
+            UUID id,
+            UUID originalEventId,
+            String queueName,
+            String eventType,
+            String idempotencyKey,
+            String aggregateType,
+            UUID aggregateId,
+            String payloadJson,
+            String replayStatus) {}
 }

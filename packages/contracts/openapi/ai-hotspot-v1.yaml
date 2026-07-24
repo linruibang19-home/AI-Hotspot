@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: AI Hotspot Core API
-  version: 0.5.0
-  description: M5 公开邮箱验证码注册/登录、身份权限、正式信源目录、内容治理与公开内容接口契约。
+  version: 1.0.0
+  description: AI Hotspot Core API 现行契约，覆盖公开产品、用户工作台、管理治理与运维接口。
 servers:
   - url: /api/core
 tags:
@@ -12,6 +12,15 @@ tags:
   - { name: AuditAdmin, description: 管理审计 }
   - { name: CrawlAdmin, description: 公开 Connector 采集任务、调度与死信回放 }
   - { name: PublicContent, description: 游客可访问的已发布公开内容 }
+  - { name: PublicDiscovery, description: 公开搜索、主题、事件和反馈 }
+  - { name: Favorites, description: 登录用户收藏 }
+  - { name: Subscriptions, description: 登录用户订阅和管理员投递治理 }
+  - { name: Research, description: 登录用户 RAG 研究 }
+  - { name: Agents, description: 登录用户 Agent 运行与审批 }
+  - { name: ContentAdmin, description: 内容、事件和治理工单 }
+  - { name: ReportAdmin, description: 报告生成、编辑与发布 }
+  - { name: AiAdmin, description: Provider、索引、评测和 RAG 监控 }
+  - { name: Operations, description: 发布就绪和运行门禁 }
   - { name: System, description: 健康检查与本地联调 }
 paths:
   /api/v1/health:
@@ -209,6 +218,7 @@ paths:
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: status, in: query, schema: { type: string } }
+        - { name: factStatus, in: query, schema: { type: string } }
         - { name: query, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
       responses:
@@ -381,8 +391,9 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
         - { $ref: "#/components/parameters/CsrfHeader" }
       responses:
-        "202": { description: 死信已审计并重新进入 Outbox, content: { application/json: { schema: { $ref: "#/components/schemas/FetchJob" } } } }
+        "202": { description: 采集或内容处理死信已审计并重新进入 Outbox, content: { application/json: { schema: { $ref: "#/components/schemas/DeadLetterReplayResponse" } } } }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
   /api/v1/public/contents:
     get:
       tags: [PublicContent]
@@ -424,6 +435,535 @@ paths:
       responses:
         "200": { description: 实时报告及归档, content: { application/json: { schema: { $ref: "#/components/schemas/PublicReportResponse" } } } }
         "422": { description: 不支持的报告周期 }
+  /api/v1/public/search:
+    get:
+      tags: [PublicDiscovery]
+      operationId: searchPublicContent
+      security: []
+      parameters:
+        - { name: query, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: sourceType, in: query, schema: { type: string } }
+        - { name: contentType, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 30, minimum: 1 } }
+      responses:
+        "200": { description: 符合公开准入规则的搜索结果, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/public/topics:
+    get:
+      tags: [PublicDiscovery]
+      operationId: listPublicTopics
+      security: []
+      responses:
+        "200": { description: 公开主题列表, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/public/topics/{slug}:
+    get:
+      tags: [PublicDiscovery]
+      operationId: getPublicTopic
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 30, minimum: 1 } }
+      responses:
+        "200": { description: 主题详情及公开内容, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/public/events:
+    get:
+      tags: [PublicDiscovery]
+      operationId: listPublicEvents
+      security: []
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 10, minimum: 1 } }
+      responses:
+        "200": { description: 公开事件列表, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/public/events/{id}:
+    get:
+      tags: [PublicDiscovery]
+      operationId: getPublicEvent
+      security: []
+      parameters: [{ $ref: "#/components/parameters/UuidPathId" }]
+      responses:
+        "200": { description: 事件详情及关联公开内容, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/public/feedback:
+    post:
+      tags: [PublicDiscovery]
+      operationId: submitPublicFeedback
+      security: []
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeedbackRequest" }
+      responses:
+        "200": { description: 治理工单已创建, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/v1/public/unsubscribe/{token}:
+    get:
+      tags: [Subscriptions]
+      operationId: unsubscribeByToken
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: 一键退订结果页面
+          content:
+            text/html:
+              schema: { type: string }
+  /api/v1/favorites:
+    get:
+      tags: [Favorites]
+      operationId: listFavorites
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 当前用户收藏, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Favorites]
+      operationId: addFavorite
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FavoriteRequest" }
+      responses:
+        "204": { description: 已收藏 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/favorites/{type}/{id}:
+    get:
+      tags: [Favorites]
+      operationId: getFavoriteState
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: type, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: 收藏状态, content: { application/json: { schema: { type: object, required: [favorite], properties: { favorite: { type: boolean } } } } } }
+    delete:
+      tags: [Favorites]
+      operationId: removeFavorite
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: type, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      responses:
+        "204": { description: 已取消收藏 }
+  /api/v1/subscriptions:
+    get:
+      tags: [Subscriptions]
+      operationId: listSubscriptions
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 当前用户订阅, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+    post:
+      tags: [Subscriptions]
+      operationId: createSubscription
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubscriptionRequest" }
+      responses:
+        "200": { description: 订阅已创建, content: { application/json: { schema: { $ref: "#/components/schemas/IdResponse" } } } }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/v1/subscriptions/{id}/status:
+    put:
+      tags: [Subscriptions]
+      operationId: setSubscriptionStatus
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UuidPathId" }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [ACTIVE, PAUSED, CANCELLED] }
+      responses:
+        "200": { description: 状态已更新 }
+  /api/v1/subscriptions/{id}/send-now:
+    post:
+      tags: [Subscriptions]
+      operationId: sendSubscriptionNow
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UuidPathId" }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      responses:
+        "200": { description: 订阅运行已创建, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/research/sessions:
+    get:
+      tags: [Research]
+      operationId: listResearchSessions
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 当前用户研究会话, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/research/query:
+    post:
+      tags: [Research]
+      operationId: runResearchQuery
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResearchQueryRequest" }
+      responses:
+        "200": { description: RAG 回答、引用与诊断, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/v1/agents/definitions:
+    get:
+      tags: [Agents]
+      operationId: listAgentDefinitions
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 可用 Agent 定义, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/agents/runs:
+    get:
+      tags: [Agents]
+      operationId: listAgentRuns
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 当前用户 Agent 运行, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+    post:
+      tags: [Agents]
+      operationId: startAgentRun
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentStartRequest" }
+      responses:
+        "200": { description: Agent 运行已创建, content: { application/json: { schema: { $ref: "#/components/schemas/IdResponse" } } } }
+  /api/v1/agents/runs/{id}:
+    get:
+      tags: [Agents]
+      operationId: getAgentRun
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/UuidPathId" }]
+      responses:
+        "200": { description: Agent 运行、步骤与工具审计, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/agents/runs/{id}/cancel:
+    post:
+      tags: [Agents]
+      operationId: cancelAgentRun
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UuidPathId" }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      responses:
+        "200": { description: 已请求取消 }
+  /api/v1/agents/approvals:
+    get:
+      tags: [Agents]
+      operationId: listAgentApprovals
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 待审批 Agent 操作, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/agents/approvals/{id}:
+    post:
+      tags: [Agents]
+      operationId: decideAgentApproval
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UuidPathId" }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentDecisionRequest" }
+      responses:
+        "200": { description: 审批结果已记录 }
+  /api/v1/admin/content:
+    get:
+      tags: [ContentAdmin]
+      operationId: listGovernedContent
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: query, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
+      responses:
+        "200": { description: 内容治理列表, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/content/{id}/actions:
+    post:
+      tags: [ContentAdmin]
+      operationId: applyContentGovernanceAction
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UuidPathId" }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GovernanceActionRequest" }
+      responses:
+        "200": { description: 治理动作已应用 }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/admin/content/events:
+    get:
+      tags: [ContentAdmin]
+      operationId: listGovernedEvents
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1 } }
+      responses:
+        "200": { description: 事件治理列表, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/admin/content/events/{eventId}/relations:
+    post:
+      tags: [ContentAdmin]
+      operationId: addEventContentRelation
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventRelationRequest" }
+      responses:
+        "200": { description: 内容已关联到事件 }
+  /api/v1/admin/content/events/{eventId}/relations/{contentId}:
+    delete:
+      tags: [ContentAdmin]
+      operationId: removeEventContentRelation
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: contentId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      responses:
+        "200": { description: 事件内容关联已移除 }
+  /api/v1/admin/content/tickets:
+    get:
+      tags: [ContentAdmin]
+      operationId: listContentTickets
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1 } }
+      responses:
+        "200": { description: 内容纠错和下架工单, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/admin/content/tickets/{id}/resolve:
+    post:
+      tags: [ContentAdmin]
+      operationId: resolveContentTicket
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UuidPathId" }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TicketResolutionRequest" }
+      responses:
+        "200": { description: 工单已解决 }
+  /api/v1/admin/reports:
+    get:
+      tags: [ReportAdmin]
+      operationId: listEditorialReports
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1 } }
+      responses:
+        "200": { description: 报告编辑列表, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/admin/reports/generate:
+    post:
+      tags: [ReportAdmin]
+      operationId: generateEditorialReport
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/CsrfHeader" }
+        - { name: period, in: query, schema: { type: string, enum: [DAILY, WEEKLY, MONTHLY], default: DAILY } }
+        - { name: anchor, in: query, schema: { type: string, format: date } }
+      responses:
+        "200": { description: 报告草稿已生成, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/reports/{id}:
+    put:
+      tags: [ReportAdmin]
+      operationId: updateEditorialReport
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UuidPathId" }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportEditRequest" }
+      responses:
+        "200": { description: 报告已更新, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/reports/{id}/publish:
+    post:
+      tags: [ReportAdmin]
+      operationId: publishEditorialReport
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UuidPathId" }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionRequest" }
+      responses:
+        "200": { description: 报告已发布, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/deliveries:
+    get:
+      tags: [Subscriptions]
+      operationId: listEmailDeliveries
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 邮件投递审计, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/admin/deliveries/{id}/retry:
+    post:
+      tags: [Subscriptions]
+      operationId: retryEmailDelivery
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UuidPathId" }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      responses:
+        "200": { description: 邮件投递已进入重试 }
+  /api/v1/admin/sources/quality:
+    get:
+      tags: [SourceAdmin]
+      operationId: getSourceQuality
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 信源质量、转化和来源份额, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/sources/quality/history:
+    get:
+      tags: [SourceAdmin]
+      operationId: getSourceQualityHistory
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: weeks, in: query, schema: { type: integer, default: 8, minimum: 1, maximum: 52 } }
+      responses:
+        "200": { description: 周度信源质量历史, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/admin/sources/quality/run:
+    post:
+      tags: [SourceAdmin]
+      operationId: runSourceQualityGovernance
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      responses:
+        "200": { description: 信源质量快照和自动治理结果, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/readiness:
+    get:
+      tags: [Operations]
+      operationId: runReadinessCheck
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: M10 发布就绪门禁及逐项证据, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/ai/configs:
+    get:
+      tags: [AiAdmin]
+      operationId: listAiProviderConfigs
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Provider 配置列表，不返回密钥明文, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+    put:
+      tags: [AiAdmin]
+      operationId: updateAiProviderConfig
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AiProviderConfigRequest" }
+      responses:
+        "200": { description: Provider 配置已更新 }
+  /api/v1/admin/ai/reindex:
+    post:
+      tags: [AiAdmin]
+      operationId: reindexKnowledge
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      responses:
+        "200": { description: 索引批次结果, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/ai/reprocess:
+    post:
+      tags: [AiAdmin]
+      operationId: reprocessMockContent
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/CsrfHeader" }
+        - { name: limit, in: query, schema: { type: integer, default: 100, minimum: 1, maximum: 500 } }
+      responses:
+        "200": { description: 重新处理任务入队结果, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/ai/reprocess/status:
+    get:
+      tags: [AiAdmin]
+      operationId: getAiReprocessStatus
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 待处理、处理中和真实准入数量, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/ai/metrics:
+    get:
+      tags: [AiAdmin]
+      operationId: getAiMetrics
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: hours, in: query, schema: { type: integer, default: 24, minimum: 1, maximum: 168 } }
+      responses:
+        "200": { description: Provider、RAG 阶段、慢查询、成本和索引指标, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/ai/runtime:
+    get:
+      tags: [AiAdmin]
+      operationId: getAiRuntimeProviders
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: AI API 当前 Generation、Embedding、Rerank Provider, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/ai/smoke:
+    post:
+      tags: [AiAdmin]
+      operationId: runAiProviderSmoke
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      responses:
+        "200": { description: 三类真实 Provider Smoke 结果, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/ai/evaluations:
+    get:
+      tags: [AiAdmin]
+      operationId: listRagEvaluations
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: passed, in: query, schema: { type: boolean } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, minimum: 1, maximum: 100 } }
+      responses:
+        "200": { description: RAG 评测历史, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/admin/ai/evaluations/run:
+    post:
+      tags: [AiAdmin]
+      operationId: runRagEvaluation
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/CsrfHeader" }
+        - { name: split, in: query, schema: { type: string, enum: [ALL, DEV, TEST, CANARY], default: ALL } }
+      responses:
+        "200": { description: RAG 评测指标、分层结果与门禁结论, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
   /api/v1/system/smoke/outbox:
     post:
       tags: [System]
@@ -461,6 +1001,11 @@ components:
       in: header
       required: true
       schema: { type: string }
+    UuidPathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
   responses:
     Unauthorized:
       description: 未登录或会话已失效
@@ -481,6 +1026,101 @@ components:
       description: 登录或邀请尝试超过限额
       content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
   schemas:
+    GenericObject:
+      type: object
+      additionalProperties: true
+    GenericList:
+      type: array
+      items: { $ref: "#/components/schemas/GenericObject" }
+    IdResponse:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string, format: uuid }
+    FeedbackRequest:
+      type: object
+      required: [type, reason]
+      properties:
+        contentId: { type: [string, "null"], format: uuid }
+        eventId: { type: [string, "null"], format: uuid }
+        type: { type: string }
+        reason: { type: string, minLength: 8, maxLength: 2000 }
+        contactEmail: { type: [string, "null"], format: email, maxLength: 320 }
+    FavoriteRequest:
+      type: object
+      required: [targetType, targetId]
+      properties:
+        targetType: { type: string }
+        targetId: { type: string, format: uuid }
+    SubscriptionRequest:
+      type: object
+      required: [name, frequency, timezone, sendTime]
+      properties:
+        name: { type: string }
+        frequency: { type: string, enum: [DAILY, WEEKLY] }
+        timezone: { type: string, example: Asia/Shanghai }
+        sendTime: { type: string, format: time }
+        weekday: { type: [integer, "null"], minimum: 1, maximum: 7 }
+        topicSlugs: { type: array, items: { type: string } }
+        maxItems: { type: [integer, "null"], minimum: 1 }
+    ResearchQueryRequest:
+      type: object
+      required: [question]
+      properties:
+        sessionId: { type: [string, "null"], format: uuid }
+        question: { type: string, minLength: 1 }
+        filters: { type: object, additionalProperties: true }
+    AgentStartRequest:
+      type: object
+      required: [agentCode, objective]
+      properties:
+        agentCode: { type: string, minLength: 1 }
+        objective: { type: string, minLength: 1 }
+    AgentDecisionRequest:
+      type: object
+      required: [approve]
+      properties:
+        approve: { type: boolean }
+        note: { type: [string, "null"] }
+    GovernanceActionRequest:
+      type: object
+      required: [action, reason, version]
+      properties:
+        action: { type: string }
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+        version: { type: integer, minimum: 0 }
+    EventRelationRequest:
+      type: object
+      required: [contentId, relationType, confidence]
+      properties:
+        contentId: { type: string, format: uuid }
+        relationType: { type: string }
+        confidence: { type: number, minimum: 0, maximum: 100 }
+    TicketResolutionRequest:
+      type: object
+      required: [status, resolution]
+      properties:
+        status: { type: string }
+        resolution: { type: string, minLength: 1, maxLength: 2000 }
+    ReportEditRequest:
+      type: object
+      required: [headline, lead, version]
+      properties:
+        headline: { type: string, minLength: 1, maxLength: 300 }
+        lead: { type: string, minLength: 1, maxLength: 5000 }
+        version: { type: integer, minimum: 0 }
+    AiProviderConfigRequest:
+      type: object
+      required: [taskType, providerName, modelName, status]
+      properties:
+        taskType: { type: string }
+        providerName: { type: string }
+        modelName: { type: string }
+        baseUrl: { type: [string, "null"], format: uri }
+        credentialRef: { type: [string, "null"] }
+        status: { type: string }
+        timeoutMs: { type: [integer, "null"], minimum: 1 }
+        parametersJson: { type: [string, "null"], description: JSON 对象字符串 }
     ApiError:
       type: object
       required: [code, message]
@@ -688,6 +1328,18 @@ components:
         firstFailedAt: { type: string, format: date-time }
         lastFailedAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
+    DeadLetterReplayResponse:
+      type: object
+      required: [aggregateType, aggregateId, replayEventId, status]
+      properties:
+        aggregateType: { type: string, enum: [FetchJob, ContentItem] }
+        aggregateId: { type: string, format: uuid }
+        replayEventId: { type: string, format: uuid }
+        status: { type: string, const: REPLAYED }
+        fetchJob:
+          anyOf:
+            - { $ref: "#/components/schemas/FetchJob" }
+            - { type: "null" }
     PublicContent:
       type: object
       required: [id, sourceName, sourceType, sourceOfficialLevel, contentType, title, summary, originalUrl, factStatus, finalScore, featured, publishedAt]

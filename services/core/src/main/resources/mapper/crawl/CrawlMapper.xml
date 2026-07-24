@@ -85,12 +85,29 @@
         from messaging.dead_letter_record where id = #{id}
     </select>
 
+    <select id="findDeadLetterForReplay" resultType="com.aihotspot.core.crawl.CrawlMapper$DeadLetterReplayView">
+        select id, original_event_id, queue_name, event_type, idempotency_key,
+               aggregate_type, aggregate_id, payload::text as payload_json, replay_status
+        from messaging.dead_letter_record
+        where id = #{id}
+        for update
+    </select>
+
     <update id="resetJobForReplay">
         update source.fetch_job
         set status = 'QUEUED', poll_outcome = 'PENDING', attempt_count = 0,
             error_code = null, last_error = null,
             started_at = null, finished_at = null, updated_at = now()
         where id = #{id} and status = 'DEAD_LETTERED'
+    </update>
+
+    <update id="resetContentForReplay">
+        update content.content_item
+        set admission_status = 'PENDING', publication_status = 'CANDIDATE',
+            visibility = 'PRIVATE', processed_at = null, updated_at = now()
+        where id = #{id}
+          and admission_status = 'FAILED'
+          and publication_status = 'REJECTED'
     </update>
 
     <update id="markDeadLetterReplayed">

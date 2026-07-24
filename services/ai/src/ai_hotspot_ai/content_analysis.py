@@ -71,9 +71,21 @@ async def analyze_content(
     fact_status = _fact_status(str(parsed.get("factStatus") or ""), text)
     dimensions = _quality_dimensions(text, title, summary, official_level, authority_score, parsed)
     relevance = _bounded(parsed.get("aiRelevance"), _relevance(text, tags))
-    positive_quality = [dimensions[key] for key in ("completeness", "clarity", "sourceEvidence", "novelty", "impact", "informationDensity")]
+    positive_quality = [
+        dimensions[key]
+        for key in (
+            "completeness",
+            "clarity",
+            "sourceEvidence",
+            "novelty",
+            "impact",
+            "informationDensity",
+        )
+    ]
     quality = round(sum(positive_quality) / len(positive_quality), 2)
-    quality = max(0.0, quality - dimensions["marketingPenalty"] * 0.12 - dimensions["rumorPenalty"] * 0.18)
+    quality = max(
+        0.0, quality - dimensions["marketingPenalty"] * 0.12 - dimensions["rumorPenalty"] * 0.18
+    )
     # Provider scores are advisory. Thin/title-only records must not receive a
     # high editorial score merely because the source itself is authoritative.
     evidence_length = len(re.sub(r"\s+", "", summary))
@@ -81,12 +93,24 @@ async def analyze_content(
         quality = max(0.0, quality - 20.0)
     elif evidence_length < 180:
         quality = max(0.0, quality - 10.0)
-    if _normalized(title) == _normalized(summary) or len(set(re.findall(r"[\w\u4e00-\u9fff]+", text.lower()))) < 10:
+    if (
+        _normalized(title) == _normalized(summary)
+        or len(set(re.findall(r"[\w\u4e00-\u9fff]+", text.lower()))) < 10
+    ):
         quality = max(0.0, quality - 12.0)
     if fact_status == "UNCONFIRMED":
         quality = max(0.0, quality - 12.0)
-    authority_component = min(100.0, max(0.0, authority_score) + (5 if official_level == "OFFICIAL" else 0))
-    final = round(relevance * 0.34 + quality * 0.36 + authority_component * 0.16 + dimensions["novelty"] * 0.07 + dimensions["impact"] * 0.07, 2)
+    authority_component = min(
+        100.0, max(0.0, authority_score) + (5 if official_level == "OFFICIAL" else 0)
+    )
+    final = round(
+        relevance * 0.34
+        + quality * 0.36
+        + authority_component * 0.16
+        + dimensions["novelty"] * 0.07
+        + dimensions["impact"] * 0.07,
+        2,
+    )
     title_zh = _clean(str(parsed.get("titleZh") or title), 300)
     summary_zh = _clean(str(parsed.get("summaryZh") or summary or title), 4000)
     reason = _clean(
@@ -170,7 +194,9 @@ def _quality_dimensions(
     }
     return {
         key: round(value, 2)
-        for key, value in {key: _bounded(parsed.get(key), default) for key, default in defaults.items()}.items()
+        for key, value in {
+            key: _bounded(parsed.get(key), default) for key, default in defaults.items()
+        }.items()
     }
 
 

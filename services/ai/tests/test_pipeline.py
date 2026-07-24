@@ -1,5 +1,5 @@
 from ai_hotspot_ai import pipeline
-from ai_hotspot_ai.repository import _may_publish_unconfirmed
+from ai_hotspot_ai.content_repository import _may_publish_unconfirmed
 
 
 def test_m1_smoke_event_is_completed_without_content_item(monkeypatch) -> None:

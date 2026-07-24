@@ -68,7 +68,7 @@ public class CrawlAdminController {
     @PostMapping("/dead-letters/{id}/replay")
     @ResponseStatus(HttpStatus.ACCEPTED)
     @PreAuthorize("hasAuthority('dead-letter:manage')")
-    public CrawlMapper.FetchJobView replay(
+    public CrawlService.DeadLetterReplayResponse replay(
             @PathVariable UUID id,
             @AuthenticationPrincipal AppUserPrincipal principal,
             HttpServletRequest request) {

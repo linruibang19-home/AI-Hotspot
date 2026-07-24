@@ -46,9 +46,7 @@ def test_website_connector_extracts_explicit_publication_date():
         ("Update", "/changelog/2026-07-14-update", "2026-07-14T00:00:00+00:00", "URL_PATH"),
     ],
 )
-def test_website_connector_recovers_explicit_date_with_provenance(
-    title, url, expected, source
-):
+def test_website_connector_recovers_explicit_date_with_provenance(title, url, expected, source):
     entries = parse_connector(
         "WEBSITE",
         f'<a href="{url}">{title}</a>'.encode(),

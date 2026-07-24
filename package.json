@@ -12,6 +12,7 @@
     "lint:web": "pnpm --filter @ai-hotspot/web lint",
     "typecheck:web": "pnpm --filter @ai-hotspot/web typecheck",
     "test:web": "pnpm --filter @ai-hotspot/web test",
+    "check:contracts": "python scripts/contracts/verify_openapi.py",
     "check": "pnpm lint:web && pnpm typecheck:web && pnpm test:web && pnpm build:web"
   }
 }

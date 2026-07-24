@@ -39,7 +39,9 @@ class MockGenerationProvider(GenerationProvider):
                     "informationDensity": 65,
                     "marketingPenalty": 5,
                     "rumorPenalty": 0,
-                    "recommendationReason": "[开发测试结果，不允许公开] Mock Provider 未执行真实内容评审。",
+                    "recommendationReason": (
+                        "[开发测试结果，不允许公开] Mock Provider 未执行真实内容评审。"
+                    ),
                 },
                 ensure_ascii=False,
             )

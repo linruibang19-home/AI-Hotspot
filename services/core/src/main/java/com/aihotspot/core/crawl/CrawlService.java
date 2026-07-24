@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -90,31 +91,113 @@ public class CrawlService {
     }
 
     @Transactional
-    public CrawlMapper.FetchJobView replayDeadLetter(
+    public DeadLetterReplayResponse replayDeadLetter(
             UUID deadLetterId, AppUserPrincipal actor, HttpServletRequest request) {
-        CrawlMapper.DeadLetterView deadLetter = mapper.findDeadLetter(deadLetterId);
+        CrawlMapper.DeadLetterReplayView deadLetter = mapper.findDeadLetterForReplay(deadLetterId);
         if (deadLetter == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, "DEAD_LETTER_NOT_FOUND", "死信记录不存在");
         }
         if (!"PENDING".equals(deadLetter.replayStatus())) {
             throw new ApiException(HttpStatus.CONFLICT, "DEAD_LETTER_ALREADY_HANDLED", "死信已经处理");
         }
-        if (!"FetchJob".equals(deadLetter.aggregateType()) || deadLetter.aggregateId() == null) {
-            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "REPLAY_NOT_SUPPORTED", "M3 只支持采集任务死信回放");
+        if (deadLetter.aggregateId() == null) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "REPLAY_NOT_SUPPORTED", "死信缺少可回放的聚合标识");
         }
-        CrawlMapper.FetchJobView job = getJob(deadLetter.aggregateId());
-        if (mapper.resetJobForReplay(job.id()) != 1) {
-            throw new ApiException(HttpStatus.CONFLICT, "FETCH_JOB_NOT_DEAD_LETTERED", "关联任务当前不可回放");
-        }
+
         UUID eventId = UUID.randomUUID();
-        appendCrawlEvent(eventId, job.id(), job.endpointId(), job.idempotencyKey(), job.correlationId(), job.traceId());
+        CrawlMapper.FetchJobView job = null;
+        String payloadJson;
+        if ("FetchJob".equals(deadLetter.aggregateType())
+                && "source.crawl.requested".equals(deadLetter.eventType())) {
+            job = getJob(deadLetter.aggregateId());
+            if (mapper.resetJobForReplay(job.id()) != 1) {
+                throw new ApiException(HttpStatus.CONFLICT, "FETCH_JOB_NOT_DEAD_LETTERED", "关联任务当前不可回放");
+            }
+            payloadJson = crawlReplayEnvelope(deadLetter, job, eventId);
+        } else if ("ContentItem".equals(deadLetter.aggregateType())
+                && "content.processing.requested".equals(deadLetter.eventType())
+                && "q.content.worker".equals(deadLetter.queueName())) {
+            if (mapper.resetContentForReplay(deadLetter.aggregateId()) != 1) {
+                throw new ApiException(HttpStatus.CONFLICT, "CONTENT_ITEM_NOT_FAILED", "关联内容当前不可回放");
+            }
+            payloadJson = contentReplayEnvelope(deadLetter, eventId);
+        } else {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "REPLAY_NOT_SUPPORTED", "该死信类型暂不支持回放");
+        }
+
+        outbox.append(
+                eventId,
+                deadLetter.eventType(),
+                1,
+                deadLetter.aggregateType(),
+                deadLetter.aggregateId(),
+                payloadJson);
         if (mapper.markDeadLetterReplayed(deadLetterId, actor.id(), eventId) != 1) {
             throw new ApiException(HttpStatus.CONFLICT, "DEAD_LETTER_REPLAY_CONFLICT", "死信回放状态冲突");
         }
         audit.record(actor.id(), "DEAD_LETTER_REPLAYED", "DEAD_LETTER", deadLetterId,
-                json(Map.of("status", "PENDING", "fetchJobId", job.id())),
-                json(Map.of("status", "REPLAYED", "replayEventId", eventId, "fetchJobId", job.id())), request);
-        return mapper.findJob(job.id());
+                json(Map.of("status", "PENDING", "aggregateType", deadLetter.aggregateType(),
+                        "aggregateId", deadLetter.aggregateId())),
+                json(Map.of("status", "REPLAYED", "replayEventId", eventId,
+                        "aggregateType", deadLetter.aggregateType(), "aggregateId", deadLetter.aggregateId())),
+                request);
+        return new DeadLetterReplayResponse(
+                deadLetter.aggregateType(),
+                deadLetter.aggregateId(),
+                eventId,
+                "REPLAYED",
+                job == null ? null : mapper.findJob(job.id()));
+    }
+
+    private String crawlReplayEnvelope(
+            CrawlMapper.DeadLetterReplayView deadLetter,
+            CrawlMapper.FetchJobView job,
+            UUID eventId) {
+        Map<String, Object> envelope = Map.ofEntries(
+                Map.entry("eventId", eventId),
+                Map.entry("eventType", deadLetter.eventType()),
+                Map.entry("eventVersion", 1),
+                Map.entry("aggregateType", deadLetter.aggregateType()),
+                Map.entry("aggregateId", job.id()),
+                Map.entry("idempotencyKey", deadLetter.idempotencyKey()),
+                Map.entry("correlationId", job.correlationId()),
+                Map.entry("traceId", job.traceId()),
+                Map.entry("occurredAt", Instant.now()),
+                Map.entry("producer", "core-api"),
+                Map.entry("payload", Map.of("fetchJobId", job.id(), "endpointId", job.endpointId())));
+        return json(envelope);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String contentReplayEnvelope(CrawlMapper.DeadLetterReplayView deadLetter, UUID eventId) {
+        try {
+            Map<String, Object> original = objectMapper.readValue(deadLetter.payloadJson(), Map.class);
+            Object payload = original.get("payload");
+            if (!(payload instanceof Map<?, ?> payloadMap)
+                    || !deadLetter.aggregateId().toString().equals(String.valueOf(payloadMap.get("contentItemId")))) {
+                throw new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "DEAD_LETTER_PAYLOAD_INVALID",
+                        "内容死信载荷与聚合标识不一致");
+            }
+            Map<String, Object> replay = new LinkedHashMap<>(original);
+            replay.put("eventId", eventId);
+            replay.put("eventType", deadLetter.eventType());
+            replay.put("eventVersion", 1);
+            replay.put("aggregateType", deadLetter.aggregateType());
+            replay.put("aggregateId", deadLetter.aggregateId());
+            replay.put("idempotencyKey", deadLetter.idempotencyKey());
+            replay.put("occurredAt", Instant.now());
+            replay.put("producer", "core-api");
+            return json(replay);
+        } catch (ApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "DEAD_LETTER_PAYLOAD_INVALID",
+                    "内容死信载荷无法解析");
+        }
     }
 
     private UUID createJob(
@@ -188,4 +271,11 @@ public class CrawlService {
             throw new IllegalStateException("无法序列化采集事件", exception);
         }
     }
+
+    public record DeadLetterReplayResponse(
+            String aggregateType,
+            UUID aggregateId,
+            UUID replayEventId,
+            String status,
+            CrawlMapper.FetchJobView fetchJob) {}
 }
