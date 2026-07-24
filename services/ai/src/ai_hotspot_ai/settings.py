@@ -1,7 +1,8 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Self
+from urllib.parse import urlsplit
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +12,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        hide_input_in_errors=True,
     )
 
     environment: str = Field(default="development", validation_alias="AI_HOTSPOT_ENV")
@@ -53,6 +55,93 @@ class Settings(BaseSettings):
     content_retry_delay_ms: int = 60_000
     content_relevance_threshold: float = 70.0
     content_quality_threshold: float = 60.0
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> Self:
+        if self.environment.strip().lower() not in {"prod", "production"}:
+            return self
+
+        violations: list[str] = []
+        self._require_real_provider(
+            violations,
+            "GENERATION",
+            self.generation_provider,
+            self.generation_base_url,
+            self.generation_api_key,
+        )
+        self._require_real_provider(
+            violations,
+            "EMBEDDING",
+            self.embedding_provider,
+            self.embedding_base_url,
+            self.embedding_api_key,
+        )
+        self._require_real_provider(
+            violations,
+            "RERANK",
+            self.rerank_provider,
+            self.rerank_base_url,
+            self.rerank_api_key,
+        )
+        self._reject_weak_url(
+            violations,
+            "DATABASE_URL",
+            self.database_url,
+            ("localhost", "ai_hotspot:ai_hotspot@"),
+        )
+        self._reject_weak_url(
+            violations,
+            "REDIS_URL",
+            self.redis_url,
+            ("localhost", "redis://redis:6379", ":ai_hotspot@"),
+        )
+        self._reject_weak_url(
+            violations,
+            "RABBITMQ_URL",
+            self.rabbitmq_url,
+            ("localhost", "ai_hotspot:ai_hotspot@"),
+        )
+        if len(self.minio_access_key.strip()) < 8 or self.minio_access_key == "ai_hotspot":
+            violations.append("MINIO_ACCESS_KEY must be replaced")
+        if len(self.minio_secret_key.strip()) < 16 or self.minio_secret_key in {
+            "ai_hotspot",
+            "ai-hotspot-local-password",
+            "change-me-in-local-env",
+        }:
+            violations.append("MINIO_SECRET_KEY must be replaced with a strong value")
+
+        if violations:
+            raise ValueError(
+                "Production security validation failed: " + ", ".join(violations)
+            )
+        return self
+
+    @staticmethod
+    def _require_real_provider(
+        violations: list[str],
+        prefix: str,
+        provider: str,
+        base_url: str | None,
+        api_key: str | None,
+    ) -> None:
+        if provider == "mock":
+            violations.append(f"{prefix}_PROVIDER must not be mock")
+        parsed = urlsplit(base_url or "")
+        if parsed.scheme.lower() != "https" or not parsed.hostname:
+            violations.append(f"{prefix}_BASE_URL must be an absolute HTTPS URL")
+        if len((api_key or "").strip()) < 16:
+            violations.append(f"{prefix}_API_KEY must be configured")
+
+    @staticmethod
+    def _reject_weak_url(
+        violations: list[str],
+        field: str,
+        value: str,
+        weak_fragments: tuple[str, ...],
+    ) -> None:
+        lowered = value.lower()
+        if any(fragment in lowered for fragment in weak_fragments):
+            violations.append(f"{field} contains a local or weak default")
 
 
 @lru_cache

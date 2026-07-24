@@ -2,7 +2,13 @@ from datetime import UTC
 
 import pytest
 
-from ai_hotspot_ai.feed import FeedError, canonicalize_url, parse_feed, strip_markup
+from ai_hotspot_ai.feed import (
+    FeedError,
+    canonicalize_url,
+    parse_feed,
+    strip_markup,
+    validate_public_url,
+)
 from ai_hotspot_ai.pipeline import _bounded_float, _bounded_int
 
 RSS = b"""<?xml version="1.0" encoding="UTF-8"?>
@@ -67,6 +73,26 @@ def test_unsafe_xml_is_rejected_without_retry() -> None:
         )
 
     assert raised.value.code == "UNSAFE_XML"
+    assert raised.value.retryable is False
+
+
+@pytest.mark.parametrize(
+    "address",
+    ["127.0.0.1", "10.0.0.8", "169.254.169.254", "::1", "fc00::1"],
+)
+def test_ssrf_policy_rejects_non_public_dns_answers(
+    monkeypatch: pytest.MonkeyPatch,
+    address: str,
+) -> None:
+    monkeypatch.setattr(
+        "ai_hotspot_ai.feed.socket.getaddrinfo",
+        lambda *_args, **_kwargs: [(2, 1, 6, "", (address, 443))],
+    )
+
+    with pytest.raises(FeedError) as raised:
+        validate_public_url("https://feed.example.com/rss")
+
+    assert raised.value.code == "SSRF_BLOCKED"
     assert raised.value.retryable is False
 
 

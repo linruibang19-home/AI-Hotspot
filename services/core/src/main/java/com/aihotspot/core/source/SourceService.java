@@ -247,7 +247,7 @@ public class SourceService {
             if (!Set.of("http", "https").contains(scheme) || uri.getHost() == null || uri.getUserInfo() != null) invalid("URL 必须是无凭据的公开 HTTP/HTTPS 地址");
             String host = IDN.toASCII(uri.getHost().toLowerCase(Locale.ROOT));
             for (InetAddress address : InetAddress.getAllByName(host)) {
-                if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress() || address.isSiteLocalAddress() || address.isMulticastAddress()) invalid("URL 解析到了不允许访问的私有或本地地址");
+                if (isNonPublicAddress(address)) invalid("URL 解析到了不允许访问的私有或本地地址");
             }
             int port = uri.getPort();
             if (port != -1 && port != 80 && port != 443) invalid("MVP 信源只允许标准 HTTP/HTTPS 端口");
@@ -258,6 +258,32 @@ public class SourceService {
         } catch (Exception exception) {
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_SOURCE_URL", "URL 无法解析或域名不可用");
         }
+    }
+
+    static boolean isNonPublicAddress(InetAddress address) {
+        if (address.isAnyLocalAddress()
+                || address.isLoopbackAddress()
+                || address.isLinkLocalAddress()
+                || address.isSiteLocalAddress()
+                || address.isMulticastAddress()) {
+            return true;
+        }
+        byte[] bytes = address.getAddress();
+        int first = bytes[0] & 0xff;
+        int second = bytes[1] & 0xff;
+        if (bytes.length == 4) {
+            return (first == 100 && second >= 64 && second <= 127)
+                    || (first == 192 && second == 0)
+                    || (first == 198 && (second == 18 || second == 19))
+                    || (first == 198 && second == 51 && (bytes[2] & 0xff) == 100)
+                    || (first == 203 && second == 0 && (bytes[2] & 0xff) == 113)
+                    || first >= 240;
+        }
+        return (first & 0xfe) == 0xfc
+                || (first == 0x20
+                    && second == 0x01
+                    && (bytes[2] & 0xff) == 0x0d
+                    && (bytes[3] & 0xff) == 0xb8);
     }
 
     private SourceMapper.EndpointDetail requireEndpoint(UUID id) {

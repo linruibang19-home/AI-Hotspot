@@ -19,6 +19,8 @@ services:
         src/ai_hotspot_ai/providers/remote.py
         src/ai_hotspot_ai/providers/resilience.py
         tests/test_api.py
+        tests/test_feed.py
+        tests/test_settings.py
         tests/test_provider_resilience.py &&
         pytest -q
 
