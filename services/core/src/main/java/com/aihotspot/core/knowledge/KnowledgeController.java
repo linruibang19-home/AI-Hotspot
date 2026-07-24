@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,7 +21,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class KnowledgeController {
     private final ResearchService research;
     public KnowledgeController(ResearchService research){this.research=research;}
-    @GetMapping("/sessions") public List<Map<String,Object>> sessions(@AuthenticationPrincipal AppUserPrincipal user){return research.sessions(user.id());}
+    @GetMapping("/sessions") public List<ResearchService.ResearchSessionSummary> sessions(@AuthenticationPrincipal AppUserPrincipal user){return research.sessions(user.id());}
+    @GetMapping("/sessions/{sessionId}") public ResearchService.ResearchSessionView session(
+            @PathVariable UUID sessionId,@AuthenticationPrincipal AppUserPrincipal user){
+        return research.session(user.id(),sessionId);
+    }
     @PostMapping("/query") public ResearchService.ResearchResult query(@Valid @RequestBody QueryRequest request,@AuthenticationPrincipal AppUserPrincipal user){
         return research.ask(user,request.sessionId(),request.question(),request.filters()==null?Map.of():request.filters());
     }

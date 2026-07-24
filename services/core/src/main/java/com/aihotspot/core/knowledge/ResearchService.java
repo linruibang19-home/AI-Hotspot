@@ -40,8 +40,54 @@ public class ResearchService {
         this.ai = RestClient.builder().baseUrl(aiBaseUrl).requestFactory(new SimpleClientHttpRequestFactory()).build();
     }
 
-    public List<Map<String,Object>> sessions(UUID userId) {
-        return jdbc.queryForList("select id,title,status,created_at,updated_at from research.session where user_id=? order by updated_at desc limit 30", userId);
+    public List<ResearchSessionSummary> sessions(UUID userId) {
+        return jdbc.query("""
+            select s.id,s.title,s.status,s.created_at,s.updated_at,
+              latest.question latest_question,latest.answer_status latest_answer_status,
+              (select count(*) from research.query_run q where q.session_id=s.id) query_count
+            from research.session s
+            left join lateral (
+              select question,answer_status from research.query_run
+              where session_id=s.id order by created_at desc limit 1
+            ) latest on true
+            where s.user_id=? order by s.updated_at desc limit 30
+            """,(rs,row) -> new ResearchSessionSummary(
+                rs.getObject("id",UUID.class),rs.getString("title"),rs.getString("status"),
+                rs.getObject("created_at",OffsetDateTime.class),rs.getObject("updated_at",OffsetDateTime.class),
+                rs.getString("latest_question"),rs.getString("latest_answer_status"),rs.getInt("query_count")),userId);
+    }
+
+    public ResearchSessionView session(UUID userId,UUID sessionId) {
+        List<ResearchSessionSummary> summaries=jdbc.query("""
+            select s.id,s.title,s.status,s.created_at,s.updated_at,
+              latest.question latest_question,latest.answer_status latest_answer_status,
+              (select count(*) from research.query_run q where q.session_id=s.id) query_count
+            from research.session s
+            left join lateral (
+              select question,answer_status from research.query_run
+              where session_id=s.id order by created_at desc limit 1
+            ) latest on true
+            where s.id=? and s.user_id=?
+            """,(rs,row) -> new ResearchSessionSummary(
+                rs.getObject("id",UUID.class),rs.getString("title"),rs.getString("status"),
+                rs.getObject("created_at",OffsetDateTime.class),rs.getObject("updated_at",OffsetDateTime.class),
+                rs.getString("latest_question"),rs.getString("latest_answer_status"),rs.getInt("query_count")),
+                sessionId,userId);
+        if(summaries.isEmpty())throw new IllegalArgumentException("研究会话不存在或不可访问");
+        List<ResearchTurn> turns=jdbc.query("""
+            select id,question,answer,answer_status,generation_provider,latency_ms,
+              retrieval_diagnostics,created_at
+            from research.query_run where session_id=? and user_id=?
+            order by created_at
+            """,(rs,row) -> {
+                UUID runId=rs.getObject("id",UUID.class);
+                return new ResearchTurn(runId,rs.getString("question"),rs.getString("answer"),
+                        rs.getString("answer_status"),rs.getString("generation_provider"),
+                        citations(runId),rs.getLong("latency_ms"),
+                        jsonMap(rs.getObject("retrieval_diagnostics")),
+                        rs.getObject("created_at",OffsetDateTime.class));
+            },sessionId,userId);
+        return new ResearchSessionView(summaries.get(0),turns);
     }
 
     List<Map<String,Object>> evaluateRetrieval(AppUserPrincipal user, String query, int limit) {
@@ -264,9 +310,10 @@ public class ResearchService {
         Matcher matcher=DAYS.matcher(query);int days=0;
         if(matcher.find())days=Math.min(365,Integer.parseInt(matcher.group(1)));
         else if(query.contains("今天"))days=1;else if(query.contains("本周"))days=7;else if(query.contains("本月"))days=31;
+        else if(query.contains("近期")||query.matches(".*(?:最近|近来)(?!\\s*\\d{1,3}\\s*天).*"))days=30;
         else if("7d".equals(range))days=7;else if("30d".equals(range))days=30;else if("90d".equals(range))days=90;
         if(days>0)cutoff=OffsetDateTime.now(ZoneOffset.UTC).minus(days,ChronoUnit.DAYS);
-        String lexical=query.replaceAll("(?:最近|近|过去)\\s*\\d{1,3}\\s*天|今天|本周|本月|有哪些|是什么|请|总结|分析"," ").replaceAll("\\s+"," ").strip();
+        String lexical=query.replaceAll("(?:最近|近|过去)\\s*\\d{1,3}\\s*天|今天|本周|本月|近期|近来|有哪些|是什么|请|总结|分析"," ").replaceAll("\\s+"," ").strip();
         if(lexical.length()<2)lexical=query;
         return new QueryPlan(lexical,query,cutoff,days,Boolean.parseBoolean(String.valueOf(filters.getOrDefault("officialOnly",false))),blankToNull(filters.get("sourceType")));
     }
@@ -403,6 +450,26 @@ public class ResearchService {
         }
         return result;
     }
+    private List<Citation> citations(UUID runId) {
+        return jdbc.query("""
+            select c.citation_no,d.title,se.name source_name,ch.source_url,c.quote_text,
+              coalesce(c.rerank_score,c.retrieval_score,0) support_score,ch.effective_published_at,
+              c.support_status,coalesce(ea.evidence_stance,'UNVERIFIED') evidence_stance,
+              coalesce(ea.freshness_status,'UNKNOWN') freshness_status,
+              coalesce(ea.claim_text,'') claim_text,coalesce(ea.assessment_reason,'') assessment_reason
+            from research.citation c
+            join knowledge.chunk ch on ch.id=c.chunk_id
+            join knowledge.document d on d.id=ch.document_id
+            left join source.source_entity se on se.id=ch.source_entity_id
+            left join research.evidence_assessment ea on ea.citation_id=c.id
+            where c.query_run_id=? order by c.citation_no
+            """,(rs,row) -> new Citation(rs.getInt("citation_no"),rs.getString("title"),
+                    rs.getString("source_name"),rs.getString("source_url"),rs.getString("quote_text"),
+                    rs.getDouble("support_score"),String.valueOf(rs.getObject("effective_published_at")),
+                    rs.getString("support_status"),rs.getString("evidence_stance"),
+                    rs.getString("freshness_status"),rs.getString("claim_text"),
+                    rs.getString("assessment_reason")),runId);
+    }
     private Map<String,Object> diagnostics(QueryPlan plan,List<Map<String,Object>> candidates,List<Map<String,Object>> reranked,List<Map<String,Object>> evidence,Map<String,Long> stageTimings){Map<String,Object> map=new LinkedHashMap<>();map.put("fusion","RRF+RERANK");map.put("timeRangeDays",plan.days());map.put("candidateCount",candidates.size());map.put("rerankedCount",reranked.size());map.put("contextCount",evidence.size());map.put("sourceCount",evidence.stream().map(row->row.get("source_entity_id")).distinct().count());map.put("eventCount",evidence.stream().map(row->row.get("event_cluster_id")).filter(v->v!=null).distinct().count());map.put("officialCount",evidence.stream().filter(row->List.of("OFFICIAL","FIRST_PARTY").contains(String.valueOf(row.get("source_official_level")))).count());map.put("stageTimingsMs",new LinkedHashMap<>(stageTimings));return map;}
     private static long elapsedMillis(long startedNanos){return Math.max(0,(System.nanoTime()-startedNanos)/1_000_000);}
     private static Set<Integer> citedNumbers(String answer){Set<Integer> values=new HashSet<>();Matcher matcher=CITATION.matcher(answer);while(matcher.find())values.add(Integer.parseInt(matcher.group(1)));return values;}
@@ -415,6 +482,8 @@ public class ResearchService {
     private static String text(Object value,String fallback){return value==null?fallback:String.valueOf(value);}
     private static String blankToNull(Object value){String text=value==null?"":String.valueOf(value).strip();return text.isBlank()?null:text;}
     private static String json(Object value){try{return new ObjectMapper().writeValueAsString(value);}catch(Exception ignored){return "{}";}}
+    @SuppressWarnings("unchecked")
+    private static Map<String,Object> jsonMap(Object value){try{return value==null?Map.of():new ObjectMapper().readValue(String.valueOf(value),Map.class);}catch(Exception ignored){return Map.of();}}
     private record Provider(String name,String model,boolean real){}
     private record GenerationResult(String answer,Map<Integer,EvidenceAssessmentPolicy.ModelAssessment> assessments,
                                     int inputTokens,int outputTokens,boolean failed,String errorCode,
@@ -426,5 +495,12 @@ public class ResearchService {
     public record Citation(int citationNo,String title,String sourceName,String sourceUrl,String quote,double supportScore,
                            String publishedAt,String supportStatus,String evidenceStance,String freshnessStatus,
                            String claimText,String assessmentReason){}
+    public record ResearchSessionSummary(UUID id,String title,String status,OffsetDateTime createdAt,
+                                         OffsetDateTime updatedAt,String latestQuestion,
+                                         String latestAnswerStatus,int queryCount){}
+    public record ResearchTurn(UUID runId,String question,String answer,String answerStatus,
+                               String generationProvider,List<Citation> citations,long latencyMs,
+                               Map<String,Object> diagnostics,OffsetDateTime createdAt){}
+    public record ResearchSessionView(ResearchSessionSummary session,List<ResearchTurn> turns){}
     public record ResearchResult(UUID runId,UUID sessionId,String answer,String answerStatus,String generationProvider,List<Citation> citations,long latencyMs,Map<String,Object> diagnostics){}
 }

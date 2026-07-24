@@ -1187,6 +1187,133 @@ a {
   text-overflow: ellipsis;
 }
 
+/* Admin pages share one readable typography and spacing baseline. */
+.admin-ui {
+  width: 100%;
+  min-width: 0;
+}
+
+.admin-ui .page-header h1 {
+  font-size: clamp(27px, 2vw, 34px);
+}
+
+.admin-ui .page-header p {
+  max-width: 760px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.admin-ui .metric-card {
+  min-height: 112px;
+  padding: 22px;
+}
+
+.admin-ui .metric-card strong {
+  font-size: 28px;
+}
+
+.admin-ui .metric-card span,
+.admin-ui .muted,
+.admin-ui .audit-row p,
+.admin-ui .invite-row p {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.admin-ui .table-panel,
+.admin-ui .detail-panel,
+.admin-ui .audit-panel {
+  padding: 24px;
+}
+
+.admin-ui .table-panel h2,
+.admin-ui .detail-panel h2,
+.admin-ui .audit-panel h2 {
+  font-size: 19px;
+}
+
+.admin-ui .data-row {
+  min-height: 64px;
+  padding: 14px 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.admin-ui .data-row.head {
+  min-height: 46px;
+  font-size: 13px;
+}
+
+.admin-ui .data-row small {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.admin-ui .status-badge {
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.admin-ui .button,
+.admin-ui input,
+.admin-ui select,
+.admin-ui textarea {
+  font-size: 14px;
+}
+
+.source-quality-panel {
+  margin-top: 18px;
+  padding: 24px;
+  overflow: hidden;
+}
+
+.source-quality-panel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.source-quality-panel > header h2 {
+  margin: 5px 0 0;
+  font-size: 20px;
+}
+
+.source-quality-panel > .metric-grid {
+  margin: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border);
+}
+
+.source-quality-panel > .metric-grid article {
+  min-width: 0;
+  padding: 22px 18px;
+}
+
+.source-quality-panel > .metric-grid article + article {
+  border-left: 1px solid var(--border);
+}
+
+.source-quality-panel > .metric-grid strong {
+  display: block;
+  font-size: 22px;
+}
+
+.source-quality-panel > .metric-grid span {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.source-quality-panel .data-table {
+  min-width: 720px;
+}
+
 .compact-empty {
   padding: 34px 20px;
 }
