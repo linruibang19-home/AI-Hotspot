@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/page-header";
 import { getPublicContent } from "@/lib/public-content";
 import { FavoriteButton } from "@/components/favorite-button";
 import { Icon } from "@/components/icons";
@@ -16,11 +15,13 @@ export default async function ContentDetailPage({ params }: { params: Promise<{ 
     : "原信源未提供时间";
   return (
     <div className="page-shell content-detail-page">
-      <PageHeader
-        title="内容详情"
-        description="公开准入内容 · 保留原文链接与来源追踪"
-        action={<Link className="button" href="/all">返回全部动态</Link>}
-      />
+      <header className="detail-toolbar">
+        <div>
+          <strong>内容详情</strong>
+          <p>公开准入内容 · 保留原文链接与来源追踪</p>
+        </div>
+        <Link className="button" href="/all">返回全部动态</Link>
+      </header>
       <article className="detail-article">
         <div className="content-meta">
           <span className="source-avatar">{item.sourceName.slice(0, 2).toUpperCase()}</span>

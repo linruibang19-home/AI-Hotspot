@@ -158,6 +158,24 @@ test("authenticated workspaces enforce a page-level session guard", () => {
   assert.match(workspaces, /onClose=.*setNotice/);
 });
 
+test("all privileged admin workspaces hide controls before authorization", () => {
+  const guard = readFileSync("src/components/admin-permission-state.tsx", "utf8");
+  for (const page of [
+    "src/app/admin/models/page.tsx",
+    "src/app/admin/operations/page.tsx",
+    "src/app/admin/readiness/page.tsx",
+    "src/app/admin/reports/page.tsx",
+  ]) {
+    const source = readFileSync(page, "utf8");
+    assert.match(source, /useAuth/);
+    assert.match(source, /AdminSessionLoading/);
+    assert.match(source, /AdminPermissionState/);
+    assert.match(source, /authLoading\|\|!allowed|authLoading \|\| !allowed/);
+  }
+  assert.match(guard, /登录或注册/);
+  assert.match(guard, /returnTo=/);
+});
+
 test("navigation preserves public workspaces and hides management links from regular users", () => {
   const sidebar = readFileSync("src/components/sidebar.tsx", "utf8");
   const navigation = readFileSync("src/lib/navigation.ts", "utf8");
@@ -190,6 +208,13 @@ test("featured and all feeds expose accessible daily folding with readable times
   assert.match(feed, /date-toggle-label/);
   assert.match(css, /font-size: 14px/);
   assert.doesNotMatch(css, /\.timeline-time \{ font-size: 0/);
+});
+
+test("content detail exposes the article title as its single primary heading", () => {
+  const detail = readFileSync("src/app/content/[id]/page.tsx", "utf8");
+  assert.match(detail, /className="detail-toolbar"/);
+  assert.equal((detail.match(/<h1>/g) ?? []).length, 1);
+  assert.doesNotMatch(detail, /title="内容详情"/);
 });
 
 test("crawl monitoring distinguishes healthy no-change from failures", () => {

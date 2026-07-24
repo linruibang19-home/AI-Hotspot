@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AdminPermissionState, AdminSessionLoading } from "@/components/admin-permission-state";
+import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -29,18 +31,23 @@ const STAGES = [
 ] as const;
 
 export default function AdminModelsPage() {
+  const { user, loading: authLoading } = useAuth();
   const [configs,setConfigs]=useState<Config[]>([]); const [metrics,setMetrics]=useState<Metrics|null>(null); const [evaluations,setEvaluations]=useState<Evaluation[]>([]);
   const [windowHours,setWindowHours]=useState(24); const [evaluationFilter,setEvaluationFilter]=useState<EvaluationFilter>("ALL"); const [notice,setNotice]=useState(""); const [busy,setBusy]=useState(false); const [loading,setLoading]=useState(true);
   const loadMetrics=useCallback(async(hours:number)=>setMetrics(await apiFetch<Metrics>(`/admin/ai/metrics?hours=${hours}`)),[]);
   const loadEvaluations=useCallback(async(filter:EvaluationFilter)=>{const query=filter==="ALL"?"":"&passed="+(filter==="PASS");setEvaluations(await apiFetch<Evaluation[]>(`/admin/ai/evaluations?limit=30${query}`));},[]);
   const load=useCallback(async()=>{setLoading(true);try{const [c]=await Promise.all([apiFetch<Config[]>("/admin/ai/configs"),loadMetrics(windowHours),loadEvaluations(evaluationFilter)]);setConfigs(c);}catch(error){setNotice(message(error));}finally{setLoading(false);}},[evaluationFilter,loadEvaluations,loadMetrics,windowHours]);
-  useEffect(()=>{const timer=window.setTimeout(()=>void load(),0);return()=>window.clearTimeout(timer);},[load]);
+  const allowed = user?.permissions.includes("ai-config:manage") ?? false;
+  useEffect(()=>{if(authLoading||!allowed)return;const timer=window.setTimeout(()=>void load(),0);return()=>window.clearTimeout(timer);},[allowed,authLoading,load]);
   async function save(config:Config){setBusy(true);try{await apiFetch("/admin/ai/configs",{method:"PUT",body:JSON.stringify({taskType:config.task_type,providerName:config.provider_name,modelName:config.model_name,baseUrl:config.base_url,credentialRef:config.credential_ref,status:config.status,timeoutMs:config.timeout_ms,parametersJson:typeof config.parameters==="string"?config.parameters:JSON.stringify(config.parameters??{})})});setNotice(`${config.task_type} 配置已保存；密钥仍只引用环境变量。`);await load();}catch(error){setNotice(message(error));}finally{setBusy(false);}}
   async function operation(path:string,label:string){setBusy(true);try{await apiFetch<Record<string,unknown>>(path,{method:"POST"});setNotice(`${label}完成，监控数据已刷新。`);await load();}catch(error){setNotice(message(error));}finally{setBusy(false);}}
   function updateConfig(index:number,key:keyof Config,value:unknown){setConfigs(values=>values.map((item,itemIndex)=>itemIndex===index?{...item,[key]:value}:item));}
   function updatePricing(index:number,key:"inputCostPerMillion"|"outputCostPerMillion",value:string){setConfigs(values=>values.map((item,itemIndex)=>{if(itemIndex!==index)return item;const parameters=configParameters(item.parameters);if(value.trim()==="")delete parameters[key];else parameters[key]=Number(value);return {...item,parameters:JSON.stringify(parameters)};}));}
   const maxStage=useMemo(()=>Math.max(1,...STAGES.map(([, ,p95])=>Number(metrics?.rag[p95]??0))),[metrics]);
   const maxTrend=useMemo(()=>Math.max(1,...(metrics?.latencyTrend??[]).map(point=>Number(point.p95_latency_ms))),[metrics]);
+  if(authLoading)return <AdminSessionLoading />;
+  if(!user)return <AdminPermissionState title="需要登录" detail="RAG 配置、评测与 Provider 监控只对管理员开放。" login />;
+  if(!allowed)return <AdminPermissionState title="没有模型治理权限" detail="当前账号不能查看或修改 Provider 与 RAG 治理配置。" />;
   return <div className="page-shell rag-admin-page"><PageHeader title="RAG 配置、评测与监控" description="从查询延迟到证据质量，再到 Provider 用量与失败降级，统一查看真实运行数据。" action={<div className="header-actions"><button className="button" disabled={busy} onClick={()=>void operation("/admin/ai/smoke","Provider 烟测")}>模型烟测</button><button className="button" disabled={busy} onClick={()=>void operation("/admin/ai/reindex","索引更新")}>更新索引</button><button className="button primary" disabled={busy} onClick={()=>void operation("/admin/ai/evaluations/run","黄金集评测")}>运行评测</button></div>}/>
     <div className="observability-toolbar"><div><span className={`live-dot ${loading?"loading":""}`} />{loading?"正在同步":"数据已同步"}<small>{metrics?.generatedAt?new Date(metrics.generatedAt).toLocaleString("zh-CN"):"—"}</small></div><label>观察窗口<select aria-label="观察窗口" value={windowHours} onChange={event=>setWindowHours(Number(event.target.value))}><option value={24}>最近 24 小时</option><option value={72}>最近 3 天</option><option value={168}>最近 7 天</option></select></label><button className="icon-refresh" aria-label="刷新监控" onClick={()=>void load()} disabled={loading}><Icon name="history" /></button></div>
     {notice&&<div className="notice" role="status">{notice}<button aria-label="关闭提示" onClick={()=>setNotice("")}>×</button></div>}
