@@ -133,9 +133,10 @@ a {
 
 .nav-label {
   padding: 0 10px 7px;
-  color: var(--subtle);
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  color: color-mix(in srgb, var(--text) 58%, var(--surface));
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
 }
 
 .nav-link {
@@ -146,9 +147,11 @@ a {
   gap: 10px;
   padding: 0 10px;
   border-radius: 8px;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--text) 76%, var(--surface));
   margin-bottom: 3px;
   font-size: 13px;
+  font-weight: 560;
+  transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
 }
 
 .nav-link:hover,
@@ -157,6 +160,15 @@ a {
   background: var(--accent-soft);
   color: var(--accent);
   outline: none;
+}
+
+.nav-link:hover {
+  transform: translateX(2px);
+}
+
+.nav-link.active {
+  box-shadow: inset 3px 0 0 var(--accent);
+  font-weight: 720;
 }
 
 .nav-icon {
@@ -174,20 +186,70 @@ a {
   color: var(--muted);
   font-size: 10px;
   line-height: 1.6;
+  text-align: center;
 }
 
 .sidebar-account {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
   min-height: 36px;
   margin-top: 8px;
   align-items: center;
-  padding: 0 4px;
-  border: 0;
-  background: transparent;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-soft) 58%, transparent);
   color: var(--accent);
   cursor: pointer;
   font-size: 11px;
   font-weight: 700;
+}
+
+.sidebar-account:hover,
+.sidebar-account:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.sidebar-profile {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  flex-direction: column;
+  padding-top: 12px;
+}
+
+.sidebar-profile strong {
+  max-width: 100%;
+  margin-top: 7px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-avatar {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sidebar-role {
+  margin-top: 2px;
+  color: color-mix(in srgb, var(--text) 62%, var(--surface));
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
 }
 
 .main-shell {

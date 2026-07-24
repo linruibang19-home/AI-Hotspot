@@ -42,8 +42,8 @@
 
     <select id="archiveBuckets" resultType="com.aihotspot.core.content.PublicReportMapper$ArchiveBucket">
         select bucket::date as anchor_date,
-               count(*) as story_count,
-               (array_agg(title order by published_at desc, id desc))[1] as lead_title
+               coalesce(max(issue.story_count), count(*)) as story_count,
+               coalesce(max(issue.headline), (array_agg(title order by report_rows.published_at desc, report_rows.id desc))[1]) as lead_title
         from (
             select c.id, c.effective_published_at as published_at, coalesce(c.title_zh, c.original_title) as title,
             <choose>
@@ -55,15 +55,13 @@
             from content.content_item c
             where <include refid="publicPredicate"/>
         ) report_rows
+        left join content.report_issue issue
+          on issue.period = #{period}
+         and issue.status = 'PUBLISHED'
+         and issue.start_date = bucket::date
         group by bucket
         order by bucket desc
         limit #{limit}
-    </select>
-
-    <select id="latestPublishedDate" resultType="java.time.LocalDate">
-        select max((c.effective_published_at at time zone 'Asia/Shanghai')::date)
-        from content.content_item c
-        where <include refid="publicPredicate"/>
     </select>
 
     <select id="findPublishedIssue" resultType="com.aihotspot.core.content.PublicReportMapper$PersistedIssue">

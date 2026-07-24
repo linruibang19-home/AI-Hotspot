@@ -79,6 +79,8 @@ test("report routes render the real Core report API", () => {
   assert.match(view, /report\.storyCount/);
   assert.match(view, /REPORT_SECTION_LIMIT/);
   assert.match(view, /truncateSummary/);
+  assert.match(view, /report\.source === "LIVE"/);
+  assert.match(view, /60_000/);
   assert.doesNotMatch(view, /\b(?:688|919|148)\b/);
 });
 

@@ -19,8 +19,6 @@ public interface PublicReportMapper {
 
     List<ArchiveBucket> archiveBuckets(@Param("period") String period, @Param("limit") int limit);
 
-    LocalDate latestPublishedDate();
-
     PersistedIssue findPublishedIssue(@Param("period") String period, @Param("anchor") LocalDate anchor);
     List<ArchiveBucket> publishedArchive(@Param("period") String period, @Param("limit") int limit);
     List<PersistedSection> publishedSections(@Param("issueId") UUID issueId);

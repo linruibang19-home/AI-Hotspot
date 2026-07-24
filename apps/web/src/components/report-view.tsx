@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import type { PublicReportResponse, ReportPeriod } from "@/lib/public-report";
 
 const periods: Array<[ReportPeriod, string]> = [["DAILY", "日报"], ["WEEKLY", "周报"], ["MONTHLY", "月报"]];
@@ -5,6 +9,14 @@ const REPORT_SECTION_LIMIT = 6;
 
 export function ReportView({ data }: { data: PublicReportResponse }) {
   const { report, archive } = data;
+  const router = useRouter();
+  useEffect(() => {
+    if (report.source !== "LIVE") return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") router.refresh();
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [report.source, router]);
   const dateLabel = report.startDate === report.endDate
     ? formatDate(report.startDate)
     : `${formatDate(report.startDate)} ～ ${formatDate(report.endDate)}`;
@@ -41,7 +53,11 @@ export function ReportView({ data }: { data: PublicReportResponse }) {
         <header className="report-masthead">
           <span>{report.volume} · {report.storyCount} STORIES · AI HOTSPOT {report.period}</span>
           <h1>AI HOTSPOT {report.periodLabel}</h1>
-          <p>{dateLabel} · {report.period} · 编辑系统自动综合</p>
+          <p>
+            {dateLabel} · {report.period} · {report.source === "LIVE"
+              ? `实时聚合${report.generatedAt ? ` · 更新于 ${formatTime(report.generatedAt)}` : ""}`
+              : "编辑发布版本"}
+          </p>
         </header>
 
         {report.period === "DAILY" ? <DailyLead data={data} /> : <LongPeriodLead data={data} />}
@@ -121,6 +137,17 @@ function LongPeriodLead({ data }: { data: PublicReportResponse }) {
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Shanghai" })
     .format(new Date(`${value}T00:00:00+08:00`));
+}
+
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Shanghai",
+  }).format(new Date(value));
 }
 
 function archiveTitle(period: ReportPeriod, value: string) {

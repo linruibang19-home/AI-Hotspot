@@ -21,6 +21,8 @@ export type PublicReportResponse = {
   report: {
     period: ReportPeriod;
     periodLabel: string;
+    source: "LIVE" | "PUBLISHED";
+    generatedAt: string | null;
     volume: string;
     startDate: string;
     endDate: string;

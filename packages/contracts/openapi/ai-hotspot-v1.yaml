@@ -1377,16 +1377,19 @@ components:
           items: { $ref: "#/components/schemas/PublicReportArchive" }
     PublicReport:
       type: object
-      required: [period, periodLabel, volume, startDate, endDate, headline, lead, storyCount, sourceCount, officialSourceCount, featuredCount, estimatedMinutes, highlights, sections]
+      required: [period, periodLabel, source, generatedAt, volume, startDate, endDate, headline, lead, storyCount, eventCount, sourceCount, officialSourceCount, featuredCount, estimatedMinutes, highlights, sections]
       properties:
         period: { type: string, enum: [DAILY, WEEKLY, MONTHLY] }
         periodLabel: { type: string }
+        source: { type: string, enum: [LIVE, PUBLISHED] }
+        generatedAt: { type: [string, "null"], format: date-time }
         volume: { type: string }
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         headline: { type: string }
         lead: { type: string }
         storyCount: { type: integer, minimum: 0 }
+        eventCount: { type: integer, minimum: 0 }
         sourceCount: { type: integer, minimum: 0 }
         officialSourceCount: { type: integer, minimum: 0 }
         featuredCount: { type: integer, minimum: 0 }

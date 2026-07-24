@@ -1,6 +1,7 @@
 package com.aihotspot.core.content;
 
 import com.aihotspot.core.api.ApiException;
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -13,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -22,15 +24,24 @@ public class PublicReportService {
     private static final ZoneId REPORT_ZONE = ZoneId.of("Asia/Shanghai");
     private static final int MAX_REPORT_ITEMS = 300;
     private final PublicReportMapper mapper;
+    private final Clock clock;
 
+    @Autowired
     public PublicReportService(PublicReportMapper mapper) {
+        this(mapper, Clock.system(REPORT_ZONE));
+    }
+
+    PublicReportService(PublicReportMapper mapper, Clock clock) {
         this.mapper = mapper;
+        this.clock = clock;
     }
 
     public ReportResponse get(String requestedPeriod, LocalDate requestedAnchor) {
         Period period = parsePeriod(requestedPeriod);
-        PublicReportMapper.PersistedIssue published = mapper.findPublishedIssue(period.name(), requestedAnchor);
-        if (published != null) return persisted(period, published);
+        if (requestedAnchor != null) {
+            PublicReportMapper.PersistedIssue published = mapper.findPublishedIssue(period.name(), requestedAnchor);
+            if (published != null) return persisted(period, published);
+        }
         return generateLive(period, requestedAnchor);
     }
 
@@ -39,10 +50,9 @@ public class PublicReportService {
     }
 
     private ReportResponse generateLive(Period period, LocalDate requestedAnchor) {
-        LocalDate latest = mapper.latestPublishedDate();
         LocalDate anchor = requestedAnchor != null
                 ? requestedAnchor
-                : latest != null ? latest : LocalDate.now(REPORT_ZONE);
+                : LocalDate.now(clock);
         DateRange range = range(period, anchor);
         Instant startAt = range.startDate().atStartOfDay(REPORT_ZONE).toInstant();
         Instant endAt = range.endDate().plusDays(1).atStartOfDay(REPORT_ZONE).toInstant();
@@ -56,7 +66,7 @@ public class PublicReportService {
                         section.items().isEmpty() ? null : compactTitle(section.items().get(0).title())))
                 .toList();
         ReportView view = new ReportView(
-                period.name(), periodLabel(period), volume(period, range.startDate()),
+                period.name(), periodLabel(period), "LIVE", clock.instant(), volume(period, range.startDate()),
                 range.startDate(), range.endDate(), headline, lead,
                 metrics.storyCount(), metrics.eventCount(), metrics.sourceCount(), metrics.officialSourceCount(),
                 metrics.featuredCount(), estimatedMinutes(metrics.storyCount()),
@@ -75,7 +85,8 @@ public class PublicReportService {
         }).toList();
         List<Highlight> highlights = sections.stream().map(section -> new Highlight(section.code(), section.label(),
                 section.items().size(), section.items().isEmpty() ? null : compactTitle(section.items().get(0).title()))).toList();
-        ReportView view = new ReportView(period.name(), periodLabel(period), issue.volume(), issue.startDate(), issue.endDate(),
+        ReportView view = new ReportView(period.name(), periodLabel(period), "PUBLISHED", null,
+                issue.volume(), issue.startDate(), issue.endDate(),
                 issue.headline(), issue.lead(), issue.storyCount(), issue.eventCount(), issue.sourceCount(),
                 issue.officialSourceCount(), issue.featuredCount(), issue.estimatedMinutes(), highlights, sections);
         List<ArchiveItem> archive = mapper.publishedArchive(period.name(), period == Period.DAILY ? 31 : 18).stream()
@@ -197,7 +208,8 @@ public class PublicReportService {
     private record DateRange(LocalDate startDate, LocalDate endDate) {}
     public record ReportResponse(ReportView report, List<ArchiveItem> archive) {}
     public record ReportView(
-            String period, String periodLabel, String volume, LocalDate startDate, LocalDate endDate,
+            String period, String periodLabel, String source, Instant generatedAt,
+            String volume, LocalDate startDate, LocalDate endDate,
             String headline, String lead, long storyCount, long eventCount, long sourceCount, long officialSourceCount,
             long featuredCount, int estimatedMinutes, List<Highlight> highlights, List<Section> sections) {}
     public record ArchiveItem(LocalDate anchorDate, long storyCount, String leadTitle) {}

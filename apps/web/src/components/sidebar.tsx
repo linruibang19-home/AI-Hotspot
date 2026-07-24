@@ -83,11 +83,12 @@ export function Sidebar() {
           <span className={theme === "light" ? "active" : ""}><Icon name="sun" /></span>
         </button>
         {loading ? <span>正在检查会话…</span> : user ? (
-          <>
+          <div className="sidebar-profile">
+            <span className="sidebar-avatar" aria-hidden="true">{user.displayName.slice(0, 1).toUpperCase()}</span>
             <strong>{user.displayName}</strong>
-            <br /><span>{user.roles.join(" / ")}</span>
+            <span className="sidebar-role">{user.roles.join(" / ")}</span>
             <button className="sidebar-account" type="button" onClick={() => void logout()}>退出登录</button>
-          </>
+          </div>
         ) : (
           <span className="sidebar-auth-links"><Link className="sidebar-account" href="/login">登录</Link><Link className="sidebar-account" href="/register">注册</Link></span>
         )}
