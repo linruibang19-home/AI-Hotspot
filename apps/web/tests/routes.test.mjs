@@ -135,6 +135,19 @@ test("M7-M10 workspaces use real APIs and expose governance", () => {
   assert.doesNotMatch(workspaces, /Mock 质量分析/);
 });
 
+test("research restores every turn and does not overstate evidence verification", () => {
+  const workspaces = readFileSync("src/components/product-workspaces.tsx", "utf8");
+  const styles = readFileSync("src/app/styles/public-product.css", "utf8");
+  assert.match(workspaces, /setSessionTurns\(view\.turns\)/);
+  assert.match(workspaces, /本研究共 \{sessionTurns\.length\} 轮/);
+  assert.match(workspaces, /timeRangeLabel/);
+  assert.match(workspaces, /sourceCount<2/);
+  assert.match(workspaces, /证据有限/);
+  assert.match(workspaces, /当前证据不足以完成交叉验证/);
+  assert.match(styles, /\.research-turns/);
+  assert.match(styles, /\.evidence-limit-banner/);
+});
+
 test("M5 content governance uses real queues, events and ticket APIs", () => {
   const page = readFileSync("src/app/admin/content/page.tsx", "utf8");
   assert.match(page, /apiFetch<Response>\("\/admin\/content\?limit=100"\)/);

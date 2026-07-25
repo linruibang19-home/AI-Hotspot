@@ -4,8 +4,6 @@ import com.aihotspot.core.auth.AppUserPrincipal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,7 +28,6 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class ResearchService {
     private static final Pattern CITATION = Pattern.compile("\\[(?:C)?(\\d+)]");
-    private static final Pattern DAYS = Pattern.compile("(?:最近|近|过去)\\s*(\\d{1,3})\\s*天");
     private static final double MIN_CITATION_COVERAGE = 0.80;
     private final JdbcTemplate jdbc;
     private final RestClient ai;
@@ -99,8 +96,8 @@ public class ResearchService {
     }
 
     List<Map<String,Object>> evaluateRetrieval(AppUserPrincipal user, String query, Map<String,Object> filters, int limit) {
-        QueryPlan plan = plan(query, filters == null ? Map.of() : filters);
-        return diversify(rerank(query, retrieve(user, plan, Math.max(limit * 4, 80)), Math.max(limit * 2, 40)), limit);
+        RagQueryPlanner.Plan plan = RagQueryPlanner.plan(query, filters == null ? Map.of() : filters);
+        return diversify(rerank(plan.semanticQuery(), retrieve(user, plan, Math.max(limit * 4, 80)), Math.max(limit * 2, 40)), limit);
     }
 
     @Transactional
@@ -110,12 +107,24 @@ public class ResearchService {
         long stageStarted = System.nanoTime();
         String normalized = question == null ? "" : question.strip();
         if (normalized.length() < 3 || normalized.length() > 1000) throw new IllegalArgumentException("研究问题长度必须为 3～1000 个字符");
-        QueryPlan plan = plan(normalized, filters);
+        RagQueryPlanner.Plan plan = RagQueryPlanner.plan(normalized, filters);
         stageTimings.put("queryUnderstanding",elapsedMillis(stageStarted));
         stageStarted=System.nanoTime();
         UUID sessionId = ensureSession(user, requestedSessionId, normalized);
         UUID runId = UUID.randomUUID();
-        Map<String,Object> retrievalConfig = Map.of("lexicalLimit",64,"vectorLimit",64,"rerankLimit",32,"contextLimit",8,"fusion","RRF","maxPerSource",2,"maxPerEvent",1);
+        boolean broadWeeklyReport = "WEEKLY_REPORT".equals(plan.intent());
+        int minimumRerankResults = broadWeeklyReport ? 32 : 0;
+        int maxPerSource = broadWeeklyReport ? 1 : 2;
+        Map<String,Object> retrievalConfig = Map.of(
+                "lexicalLimit",64,
+                "vectorLimit",64,
+                "rerankLimit",32,
+                "contextLimit",8,
+                "fusion","RRF",
+                "maxPerSource",maxPerSource,
+                "maxPerEvent",1,
+                "minimumRerankResults",minimumRerankResults,
+                "queryPlannerVersion","temporal-v2");
         jdbc.update("insert into research.query_run(id,session_id,user_id,question,normalized_query,filters,permission_snapshot,retrieval_config,query_intent) values(?,?,?,?,?,?::jsonb,?::jsonb,?::jsonb,?::jsonb)",
                 runId, sessionId, user.id(), normalized, plan.lexicalQuery(), json(filters), json(Map.of("userId",user.id(),"roles",user.roles())), json(retrievalConfig), json(plan.asMap()));
         stageTimings.put("permissionAndSession",elapsedMillis(stageStarted));
@@ -123,8 +132,8 @@ public class ResearchService {
         RetrievalResult retrieval = retrieveWithTimings(user,plan,64);
         List<Map<String,Object>> candidates = retrieval.rows();
         stageTimings.put("embedding",retrieval.embeddingMs()); stageTimings.put("hybridRetrieval",retrieval.databaseMs());
-        stageStarted=System.nanoTime(); List<Map<String,Object>> reranked = rerank(normalized, candidates, 32); stageTimings.put("rerank",elapsedMillis(stageStarted));
-        stageStarted=System.nanoTime(); List<Map<String,Object>> evidence = diversify(reranked, 8); stageTimings.put("diversification",elapsedMillis(stageStarted));
+        stageStarted=System.nanoTime(); List<Map<String,Object>> reranked = rerank(plan.semanticQuery(), candidates, 32, minimumRerankResults); stageTimings.put("rerank",elapsedMillis(stageStarted));
+        stageStarted=System.nanoTime(); List<Map<String,Object>> evidence = diversify(reranked, 8, maxPerSource); stageTimings.put("diversification",elapsedMillis(stageStarted));
         Map<String,Object> diagnostics = diagnostics(plan, candidates, reranked, evidence,stageTimings);
         if (evidence.isEmpty()) {
             String noEvidence = "当前有权知识库在指定时间和来源范围内没有足够证据回答该问题。";
@@ -201,11 +210,11 @@ public class ResearchService {
         return requested;
     }
 
-    private List<Map<String,Object>> retrieve(AppUserPrincipal user, QueryPlan plan, int limit) {
+    private List<Map<String,Object>> retrieve(AppUserPrincipal user, RagQueryPlanner.Plan plan, int limit) {
         return retrieveWithTimings(user,plan,limit).rows();
     }
 
-    private RetrievalResult retrieveWithTimings(AppUserPrincipal user, QueryPlan plan, int limit) {
+    private RetrievalResult retrieveWithTimings(AppUserPrincipal user, RagQueryPlanner.Plan plan, int limit) {
         String roles=user.roles().stream().map(role->"'"+role.replace("'","")+"'").reduce((a,b)->a+","+b).orElse("''");
         long started=System.nanoTime(); String vector=queryEmbedding(plan.semanticQuery()); long embeddingMs=elapsedMillis(started);
         String sql="""
@@ -232,6 +241,7 @@ public class ResearchService {
                     (acl.principal_type='USER' and acl.principal_id=?) or
                     (acl.principal_type='ROLE' and acl.principal_id in(select id from iam.role where code in (__ROLES__))))))
                 and (?::timestamptz is null or ch.effective_published_at>=?::timestamptz)
+                and (?::timestamptz is null or ch.effective_published_at<=?::timestamptz)
                 and (not ? or ch.source_official_level in ('OFFICIAL','FIRST_PARTY'))
                 and (?::text is null or ci.source_type=?::text)
             ), ranked as (
@@ -248,7 +258,8 @@ public class ResearchService {
             from ranked order by score desc,effective_published_at desc nulls last,chunk_id limit ?
             """.replace("__ROLES__",roles);
         started=System.nanoTime(); List<Map<String,Object>> rows=jdbc.queryForList(sql,plan.lexicalQuery(),plan.lexicalQuery(),plan.lexicalQuery(),vector,vector,user.id(),
-                plan.cutoff(),plan.cutoff(),plan.officialOnly(),plan.sourceType(),plan.sourceType(),limit);
+                plan.windowStart(),plan.windowStart(),plan.windowEnd(),plan.windowEnd(),
+                plan.officialOnly(),plan.sourceType(),plan.sourceType(),limit);
         return new RetrievalResult(rows,embeddingMs,elapsedMillis(started));
     }
 
@@ -275,6 +286,11 @@ public class ResearchService {
 
     @SuppressWarnings("unchecked")
     private List<Map<String,Object>> rerank(String query,List<Map<String,Object>> rows,int topN) {
+        return rerank(query,rows,topN,0);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String,Object>> rerank(String query,List<Map<String,Object>> rows,int topN,int minimumResults) {
         if(rows.isEmpty())return rows;
         long started=System.nanoTime();String providerName="unavailable";String providerModel="unknown";
         try {
@@ -294,7 +310,8 @@ public class ResearchService {
             ranked.sort((left,right)->Double.compare(((Number)right.get("score")).doubleValue(),((Number)left.get("score")).doubleValue()));
             double best=((Number)ranked.get(0).get("score")).doubleValue();double floor=Math.max(0.01,best*0.35);
             List<Map<String,Object>> qualified=ranked.stream().filter(row->((Number)row.get("score")).doubleValue()>=floor).toList();
-            List<Map<String,Object>> result=qualified.isEmpty()?ranked.subList(0,Math.min(topN,ranked.size())):qualified.subList(0,Math.min(topN,qualified.size()));
+            int resultSize=Math.min(topN,Math.max(Math.min(minimumResults,ranked.size()),qualified.size()));
+            List<Map<String,Object>> result=ranked.subList(0,resultSize);
             recordProviderMetric("RERANK",providerName,providerModel,"SUCCEEDED",elapsedMillis(started),0,0,null,BigDecimal.ZERO);
             return result;
         }catch(Exception error){
@@ -304,24 +321,15 @@ public class ResearchService {
     }
 
     private List<Map<String,Object>> diversify(List<Map<String,Object>> rows,int limit) {
-        List<Map<String,Object>> result=new ArrayList<>(); Map<Object,Integer> sourceCounts=new HashMap<>(); Set<Object> events=new HashSet<>();
-        for(Map<String,Object> row:rows){Object source=row.get("source_entity_id");Object event=row.get("event_cluster_id");
-            if(sourceCounts.getOrDefault(source,0)>=2)continue;if(event!=null&&!events.add(event))continue;
-            result.add(row);sourceCounts.merge(source,1,Integer::sum);if(result.size()>=limit)break;}
-        return result;
+        return diversify(rows,limit,2);
     }
 
-    private QueryPlan plan(String query,Map<String,Object> filters) {
-        OffsetDateTime cutoff=null;String range=String.valueOf(filters.getOrDefault("timeRange","auto"));
-        Matcher matcher=DAYS.matcher(query);int days=0;
-        if(matcher.find())days=Math.min(365,Integer.parseInt(matcher.group(1)));
-        else if(query.contains("今天"))days=1;else if(query.contains("本周"))days=7;else if(query.contains("本月"))days=31;
-        else if(query.contains("近期")||query.matches(".*(?:最近|近来)(?!\\s*\\d{1,3}\\s*天).*"))days=30;
-        else if("7d".equals(range))days=7;else if("30d".equals(range))days=30;else if("90d".equals(range))days=90;
-        if(days>0)cutoff=OffsetDateTime.now(ZoneOffset.UTC).minus(days,ChronoUnit.DAYS);
-        String lexical=query.replaceAll("(?:最近|近|过去)\\s*\\d{1,3}\\s*天|今天|本周|本月|近期|近来|有哪些|是什么|请|总结|分析"," ").replaceAll("\\s+"," ").strip();
-        if(lexical.length()<2)lexical=query;
-        return new QueryPlan(lexical,query,cutoff,days,Boolean.parseBoolean(String.valueOf(filters.getOrDefault("officialOnly",false))),blankToNull(filters.get("sourceType")));
+    private List<Map<String,Object>> diversify(List<Map<String,Object>> rows,int limit,int maxPerSource) {
+        List<Map<String,Object>> result=new ArrayList<>(); Map<Object,Integer> sourceCounts=new HashMap<>(); Set<Object> events=new HashSet<>();
+        for(Map<String,Object> row:rows){Object source=row.get("source_entity_id");Object event=row.get("event_cluster_id");
+            if(sourceCounts.getOrDefault(source,0)>=maxPerSource)continue;if(event!=null&&!events.add(event))continue;
+            result.add(row);sourceCounts.merge(source,1,Integer::sum);if(result.size()>=limit)break;}
+        return result;
     }
 
     @SuppressWarnings("unchecked") private Provider provider(){try{Map<String,Object> response=ai.get().uri("/api/v1/providers").retrieve().body(Map.class);Map<String,Object> generation=(Map<String,Object>)response.get("generation");String name=String.valueOf(generation.get("provider"));return new Provider(name,String.valueOf(generation.get("model")),!isMock(name));}catch(Exception ignored){return new Provider("extractive-fallback","none",false);}}
@@ -340,11 +348,11 @@ public class ResearchService {
                 rs.getString("template_hash")));
     }
 
-    @SuppressWarnings("unchecked") private GenerationResult generate(String question,QueryPlan plan,List<Map<String,Object>> evidence,PromptTemplate promptTemplate){
+    @SuppressWarnings("unchecked") private GenerationResult generate(String question,RagQueryPlanner.Plan plan,List<Map<String,Object>> evidence,PromptTemplate promptTemplate){
         StringBuilder context=new StringBuilder();for(int i=0;i<evidence.size();i++){Map<String,Object> row=evidence.get(i);String text=String.valueOf(row.get("content_text"));context.append('[').append(i+1).append("] ").append(row.get("source_name")).append(" | ").append(row.get("effective_published_at")).append(" | fact_status=").append(row.get("fact_status")).append("\n").append(text,0,Math.min(900,text.length())).append("\n\n");}
         String task=promptTemplate.taskTemplate()
                 .replace("{{question}}",question)
-                .replace("{{timeRange}}",plan.days()>0?"最近"+plan.days()+"天":"不限");
+                .replace("{{timeRange}}",plan.timeRangeLabel());
         String evidenceMessage=promptTemplate.evidenceTemplate().replace("{{evidence}}",context);
         try{
             Map<String,Object> response=ai.post().uri("/api/v1/generate").contentType(MediaType.APPLICATION_JSON)
@@ -422,7 +430,7 @@ public class ResearchService {
         }catch(Exception ignored){return BigDecimal.ZERO;}
     }
 
-    private static String noEvidenceReason(QueryPlan plan,List<Map<String,Object>> candidates,List<Map<String,Object>> reranked){
+    private static String noEvidenceReason(RagQueryPlanner.Plan plan,List<Map<String,Object>> candidates,List<Map<String,Object>> reranked){
         if(candidates.isEmpty()&&plan.officialOnly())return "OFFICIAL_SCOPE_NO_MATCH";
         if(candidates.isEmpty()&&plan.days()>0)return "TIME_RANGE_NO_MATCH";
         if(candidates.isEmpty()&&plan.sourceType()!=null)return "SOURCE_TYPE_NO_MATCH";
@@ -476,7 +484,7 @@ public class ResearchService {
                     rs.getString("freshness_status"),rs.getString("claim_text"),
                     rs.getString("assessment_reason")),runId);
     }
-    private Map<String,Object> diagnostics(QueryPlan plan,List<Map<String,Object>> candidates,List<Map<String,Object>> reranked,List<Map<String,Object>> evidence,Map<String,Long> stageTimings){Map<String,Object> map=new LinkedHashMap<>();map.put("fusion","RRF+RERANK");map.put("timeRangeDays",plan.days());map.put("candidateCount",candidates.size());map.put("rerankedCount",reranked.size());map.put("contextCount",evidence.size());map.put("sourceCount",evidence.stream().map(row->row.get("source_entity_id")).distinct().count());map.put("eventCount",evidence.stream().map(row->row.get("event_cluster_id")).filter(v->v!=null).distinct().count());map.put("officialCount",evidence.stream().filter(row->List.of("OFFICIAL","FIRST_PARTY").contains(String.valueOf(row.get("source_official_level")))).count());map.put("stageTimingsMs",new LinkedHashMap<>(stageTimings));return map;}
+    private Map<String,Object> diagnostics(RagQueryPlanner.Plan plan,List<Map<String,Object>> candidates,List<Map<String,Object>> reranked,List<Map<String,Object>> evidence,Map<String,Long> stageTimings){Map<String,Object> map=new LinkedHashMap<>();map.put("fusion","RRF+RERANK");map.put("timeRangeDays",plan.days());map.put("timeRangeKind",plan.rangeKind());map.put("timeRangeLabel",plan.timeRangeLabel());map.put("windowStart",plan.windowStart()==null?null:plan.windowStart().toString());map.put("windowEnd",plan.windowEnd()==null?null:plan.windowEnd().toString());map.put("queryIntent",plan.intent());map.put("candidateCount",candidates.size());map.put("rerankedCount",reranked.size());map.put("contextCount",evidence.size());map.put("sourceCount",evidence.stream().map(row->row.get("source_entity_id")).distinct().count());map.put("eventCount",evidence.stream().map(row->row.get("event_cluster_id")).filter(v->v!=null).distinct().count());map.put("officialCount",evidence.stream().filter(row->List.of("OFFICIAL","FIRST_PARTY").contains(String.valueOf(row.get("source_official_level")))).count());map.put("stageTimingsMs",new LinkedHashMap<>(stageTimings));return map;}
     private static long elapsedMillis(long startedNanos){return Math.max(0,(System.nanoTime()-startedNanos)/1_000_000);}
     private static Set<Integer> citedNumbers(String answer){Set<Integer> values=new HashSet<>();Matcher matcher=CITATION.matcher(answer);while(matcher.find())values.add(Integer.parseInt(matcher.group(1)));return values;}
     private static boolean hasOnlyValidCitations(String answer,int evidenceCount){return citedNumbers(answer).stream().allMatch(value->value>=1&&value<=evidenceCount);}
@@ -486,7 +494,6 @@ public class ResearchService {
     private static int number(Object value){if(value instanceof Number number)return number.intValue();try{return Integer.parseInt(String.valueOf(value));}catch(Exception ignored){return 0;}}
     private static double decimal(Object value){if(value instanceof Number number)return number.doubleValue();try{return Double.parseDouble(String.valueOf(value));}catch(Exception ignored){return 0;}}
     private static String text(Object value,String fallback){return value==null?fallback:String.valueOf(value);}
-    private static String blankToNull(Object value){String text=value==null?"":String.valueOf(value).strip();return text.isBlank()?null:text;}
     private static String json(Object value){try{return new ObjectMapper().writeValueAsString(value);}catch(Exception ignored){return "{}";}}
     @SuppressWarnings("unchecked")
     private static Map<String,Object> jsonMap(Object value){try{return value==null?Map.of():new ObjectMapper().readValue(String.valueOf(value),Map.class);}catch(Exception ignored){return Map.of();}}
@@ -497,7 +504,6 @@ public class ResearchService {
     private record PromptTemplate(UUID id,String version,String systemTemplate,String taskTemplate,
                                   String evidenceTemplate,String hash){}
     private record RetrievalResult(List<Map<String,Object>> rows,long embeddingMs,long databaseMs){}
-    private record QueryPlan(String lexicalQuery,String semanticQuery,OffsetDateTime cutoff,int days,boolean officialOnly,String sourceType){Map<String,Object> asMap(){Map<String,Object> map=new LinkedHashMap<>();map.put("lexicalQuery",lexicalQuery);map.put("timeRangeDays",days);map.put("cutoff",cutoff==null?null:cutoff.toString());map.put("officialOnly",officialOnly);map.put("sourceType",sourceType);return map;}}
     public record Citation(int citationNo,String title,String sourceName,String sourceUrl,String quote,double supportScore,
                            String publishedAt,String supportStatus,String evidenceStance,String freshnessStatus,
                            String claimText,String assessmentReason){}
