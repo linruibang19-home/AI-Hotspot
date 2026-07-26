@@ -34,6 +34,10 @@
 
 RAG v3.3 将两个容易混淆的维度分开保存：`citation.support_status` 只描述引用片段对答案句的支撑质量；`evidence_assessment.evidence_stance` 描述证据对统一主张是支持、反驳还是未证实，`freshness_status` 独立描述当前、过期或时间未知。Generation 以结构化 JSON 给出初判，Core 再执行不可绕过的治理规则：未确认内容强制为未证实；对时间敏感问题，超出时间窗口的证据标为过期；明确否认原主张的文本标为反驳。
 
+V041 起增加 Claim-Evidence 蕴含门禁：服务端提取中英文实体、数字和中文双字信号，对模型生成的 `claimText` 与数据库原文做覆盖校验；完全不匹配的 SUPPORTS 强制降级为 UNVERIFIED，并以 `ENTAILMENT_GUARD` 留痕。该分数是防止明显幻觉支持关系的确定性下限，不冒充完整语义事实判定。引用 URL 不接受模型输出，只能由已入库的 Chunk → Document → SourceEntity 关系返回；评测要求当前 Prompt 的引用来源链异常为 0。
+
+在线结构质量不允许用“0 样本、0 失败”通过：当前 Prompt 至少需要 6 条真实 Provider 结构样本和 6 条 Claim-Evidence 样本。生成结果必须是完整 JSON、包含非空 answer 和实际引用编号对应的 evidenceAssessments；截断或合同不完整时只使用确定性原文摘录，不把残缺 JSON 当成答案。V042 将 `rag-answer-v1.2.1` 的正文和 assessment 长度做上限约束，并按上下文数量动态给出输出预算。
+
 冲突检测以标准化后的同一主张为边界，只有同一主张同时具备支持和反驳证据才显示冲突提示，避免把不同事实的相反立场误报为冲突。未证实、过期和冲突证据都会在答案中补充带编号的披露，新增引用仍须通过 ACL 和编号校验；前端分别展示语义立场与时效徽标，点击正文编号可聚焦原始证据卡。
 
 ## 4. Agent 架构

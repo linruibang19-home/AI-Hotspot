@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -21,6 +22,8 @@ final class EvidenceAssessmentPolicy {
     private static final Pattern CONFLICT_DISCLOSURE = Pattern.compile("冲突|反驳|否认|不一致|相反");
     private static final Pattern UNVERIFIED_DISCLOSURE = Pattern.compile("未证实|尚待核验|无法证实|有待确认");
     private static final Pattern OUTDATED_DISCLOSURE = Pattern.compile("过期|较早|时效|不再适用|已被更新");
+    private static final Pattern LATIN_SIGNAL = Pattern.compile("[a-z0-9][a-z0-9._+-]{1,}", Pattern.CASE_INSENSITIVE);
+    private static final Pattern HAN_SIGNAL = Pattern.compile("\\p{IsHan}{2,}");
 
     private EvidenceAssessmentPolicy() {}
 
@@ -63,7 +66,14 @@ final class EvidenceAssessmentPolicy {
             String fallbackClaim = String.valueOf(row.getOrDefault("title", "相关事实"));
             String claim = safe(ruleClaim != null ? ruleClaim : model == null ? fallbackClaim : model.claimText(), 300);
             if (claim.isBlank()) claim = safe(fallbackClaim, 300);
-            result.put(citationNo, new Assessment(citationNo, claim, stance, freshness, reason, method));
+            Entailment entailment = entailment(claim, fallbackClaim + "\n" + String.valueOf(row.getOrDefault("content_text", "")));
+            if ("SUPPORTS".equals(stance) && "UNSUPPORTED".equals(entailment.status())) {
+                stance = "UNVERIFIED";
+                method = "ENTAILMENT_GUARD";
+                reason = "主张与原文证据缺少足够可核验的语义重合，已阻止将其标记为支持。";
+            }
+            result.put(citationNo, new Assessment(citationNo, claim, stance, freshness, reason, method,
+                    entailment.status(), entailment.score()));
         }
         return result;
     }
@@ -95,7 +105,44 @@ final class EvidenceAssessmentPolicy {
             counts.put(stance, assessments.values().stream().filter(value -> stance.equals(value.stance())).count());
         }
         counts.put("OUTDATED", assessments.values().stream().filter(value -> "OUTDATED".equals(value.freshnessStatus())).count());
+        counts.put("ENTAILED", assessments.values().stream().filter(value -> "ENTAILED".equals(value.entailmentStatus())).count());
+        counts.put("PARTIAL", assessments.values().stream().filter(value -> "PARTIAL".equals(value.entailmentStatus())).count());
+        counts.put("ENTAILMENT_REJECTED", assessments.values().stream().filter(value -> "UNSUPPORTED".equals(value.entailmentStatus())).count());
         return counts;
+    }
+
+    private static Entailment entailment(String claim, String evidence) {
+        String normalizedClaim = normalizeForEntailment(claim);
+        String normalizedEvidence = normalizeForEntailment(evidence);
+        if (normalizedClaim.isBlank() || normalizedEvidence.isBlank()) return new Entailment("NOT_EVALUATED", 0);
+        if (normalizedEvidence.contains(normalizedClaim)) return new Entailment("ENTAILED", 1);
+        Set<String> claimSignals = signals(claim);
+        Set<String> evidenceSignals = signals(evidence);
+        if (claimSignals.isEmpty()) return new Entailment("NOT_EVALUATED", 0);
+        long matches = claimSignals.stream().filter(evidenceSignals::contains).count();
+        double score = (double) matches / claimSignals.size();
+        String status = score >= 0.45 ? "ENTAILED" : score >= 0.12 ? "PARTIAL" : "UNSUPPORTED";
+        return new Entailment(status, Math.round(score * 10_000d) / 10_000d);
+    }
+
+    private static Set<String> signals(String value) {
+        Set<String> result = new HashSet<>();
+        String normalized = value == null ? "" : value.toLowerCase(Locale.ROOT);
+        var latin = LATIN_SIGNAL.matcher(normalized);
+        while (latin.find()) result.add(latin.group());
+        var han = HAN_SIGNAL.matcher(normalized);
+        while (han.find()) {
+            String sequence = han.group();
+            for (int index = 0; index < sequence.length() - 1; index++) {
+                result.add(sequence.substring(index, index + 2));
+            }
+        }
+        return result;
+    }
+
+    private static String normalizeForEntailment(String value) {
+        return value == null ? "" : value.toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\p{IsHan}a-z0-9]+", "");
     }
 
     private static ConflictPair conflictPair(Map<Integer,Assessment> assessments) {
@@ -148,7 +195,13 @@ final class EvidenceAssessmentPolicy {
 
     record ModelAssessment(int citationNo, String claimText, String stance, String reason) {}
     record Assessment(int citationNo, String claimText, String stance, String freshnessStatus,
-                      String reason, String method) {}
+                      String reason, String method, String entailmentStatus, double entailmentScore) {
+        Assessment(int citationNo, String claimText, String stance, String freshnessStatus,
+                   String reason, String method) {
+            this(citationNo, claimText, stance, freshnessStatus, reason, method, "NOT_EVALUATED", 0);
+        }
+    }
     record DisclosureResult(String answer, boolean conflictDetected) {}
+    private record Entailment(String status, double score) {}
     private record ConflictPair(Assessment support, Assessment refute) {}
 }

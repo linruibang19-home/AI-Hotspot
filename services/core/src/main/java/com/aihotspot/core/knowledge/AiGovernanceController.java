@@ -326,7 +326,42 @@ public class AiGovernanceController {
         long structuredSamples=((Number)structured.get("structured_samples")).longValue();
         long structuredFailures=((Number)structured.get("structured_failures")).longValue();
         double structuredFailureRate=structuredSamples==0?0:(double)structuredFailures/structuredSamples;
+        Map<String,Object> claimEvidence=jdbc.queryForMap("""
+            select count(*) filter(where ea.entailment_status<>'NOT_EVALUATED') entailment_samples,
+              count(*) filter(where ea.entailment_status in ('ENTAILED','PARTIAL')) entailment_accepted
+            from research.evidence_assessment ea
+            join research.citation c on c.id=ea.citation_id
+            join research.query_run q on q.id=c.query_run_id
+            where q.created_at>=now()-interval '7 days' and q.answer_status='SUCCEEDED'
+              and q.prompt_version=(
+                select version from knowledge.prompt_version
+                where task_type='RAG_GENERATION' and status='ACTIVE'
+                order by activated_at desc nulls last limit 1
+              )
+              and lower(coalesce(q.generation_provider,'')) not in
+                ('','mock','test','fixture','none','extractive-fallback')
+            """);
+        long entailmentSamples=((Number)claimEvidence.get("entailment_samples")).longValue();
+        long entailmentAccepted=((Number)claimEvidence.get("entailment_accepted")).longValue();
+        double claimEvidenceEntailmentRate=entailmentSamples==0?0:(double)entailmentAccepted/entailmentSamples;
+        long citationProvenanceFailures=jdbc.queryForObject("""
+            select count(*)
+            from research.citation c
+            join research.query_run q on q.id=c.query_run_id
+            where q.created_at>=now()-interval '7 days'
+              and q.prompt_version=(
+                select version from knowledge.prompt_version
+                where task_type='RAG_GENERATION' and status='ACTIVE'
+                order by activated_at desc nulls last limit 1
+              )
+              and (c.provenance_status<>'VERIFIED'
+                or nullif(trim(c.source_title),'') is null
+                or nullif(trim(c.source_name),'') is null
+                or nullif(trim(c.source_url),'') is null)
+            """,Long.class);
         int minimumCases=number(thresholds.get("minimumCases"),50); double minimumRecall=decimal(thresholds.get("recallAt20"),0.80); double minimumNdcg=decimal(thresholds.get("ndcgAt10"),0.70); double minimumCitationSupport=decimal(thresholds.get("citationSupport"),0.90);
+        int minimumStructuredSamples=number(thresholds.get("minimumStructuredOutputSamples"),6);
+        int minimumClaimEvidenceSamples=number(thresholds.get("minimumClaimEvidenceSamples"),6);
         int requiredCases="ALL".equals(requestedSplit)?minimumCases:1;
         boolean passed=mockPublic==0&&aclLeaks<=number(thresholds.get("aclLeaks"),0)&&indexed>0
                 &&cases.size()>=requiredCases&&recall>=minimumRecall&&ndcg>=minimumNdcg
@@ -334,9 +369,13 @@ public class AiGovernanceController {
                 &&decimal(retrievalQuality.get("precisionAt8"),0)>=decimal(thresholds.get("precisionAt8"),0.75)
                 &&decimal(retrievalQuality.get("mrrAt10"),0)>=decimal(thresholds.get("mrrAt10"),0.85)
                 &&decimal(retrievalQuality.get("refusalAccuracy"),0)>=decimal(thresholds.get("refusalAccuracy"),0.95)
+                &&structuredSamples>=minimumStructuredSamples
                 &&structuredFailureRate<=decimal(thresholds.get("structuredOutputFailureRate"),0.01)
+                &&entailmentSamples>=minimumClaimEvidenceSamples
+                &&claimEvidenceEntailmentRate>=decimal(thresholds.get("claimEvidenceEntailmentRate"),0.90)
+                &&citationProvenanceFailures<=number(thresholds.get("citationProvenanceFailures"),0)
                 &&citationSupport>=minimumCitationSupport&&liveQueries>0&&avgCoverage>=0.80&&avgSources>=2;
-        Map<String,Object> metricMap=new LinkedHashMap<>();metricMap.put("split",requestedSplit);metricMap.put("caseCount",cases.size());metricMap.put("recallAt20",recall);metricMap.put("ndcgAt10",ndcg);metricMap.putAll(retrievalQuality);metricMap.put("citationSupport",citationSupport);metricMap.put("citationCount",citations);metricMap.put("assessedEvidence",assessedEvidence);metricMap.put("conflictRuns",conflictRuns);metricMap.put("structuredOutputSamples",structuredSamples);metricMap.put("structuredOutputFailures",structuredFailures);metricMap.put("structuredOutputFailureRate",structuredFailureRate);metricMap.put("indexedDocuments",indexed);metricMap.put("mockPublic",mockPublic);metricMap.put("aclLeaks",aclLeaks);metricMap.put("liveQueries",liveQueries);metricMap.put("avgCitationCoverage",avgCoverage);metricMap.put("avgSourceCount",avgSources);
+        Map<String,Object> metricMap=new LinkedHashMap<>();metricMap.put("split",requestedSplit);metricMap.put("caseCount",cases.size());metricMap.put("recallAt20",recall);metricMap.put("ndcgAt10",ndcg);metricMap.putAll(retrievalQuality);metricMap.put("citationSupport",citationSupport);metricMap.put("citationCount",citations);metricMap.put("assessedEvidence",assessedEvidence);metricMap.put("conflictRuns",conflictRuns);metricMap.put("structuredOutputSamples",structuredSamples);metricMap.put("minimumStructuredOutputSamples",minimumStructuredSamples);metricMap.put("structuredOutputFailures",structuredFailures);metricMap.put("structuredOutputFailureRate",structuredFailureRate);metricMap.put("claimEvidenceSamples",entailmentSamples);metricMap.put("minimumClaimEvidenceSamples",minimumClaimEvidenceSamples);metricMap.put("claimEvidenceEntailmentRate",claimEvidenceEntailmentRate);metricMap.put("citationProvenanceFailures",citationProvenanceFailures);metricMap.put("indexedDocuments",indexed);metricMap.put("mockPublic",mockPublic);metricMap.put("aclLeaks",aclLeaks);metricMap.put("liveQueries",liveQueries);metricMap.put("avgCitationCoverage",avgCoverage);metricMap.put("avgSourceCount",avgSources);
         metricMap.put("bySplit",summaries(splitScores));metricMap.put("byScenario",summaries(scenarioScores));metricMap.put("cases",caseResults);
         jdbc.update("insert into knowledge.evaluation_run(id,suite_id,status,provider_snapshot,metrics,passed,started_by,completed_at) values(?,?,'SUCCEEDED',?::jsonb,?::jsonb,?,?,now())",run,suite,toJson(runtime()),toJson(metricMap),passed,user.id());
         return Map.of("runId",run,"passed",passed,"metrics",metricMap);

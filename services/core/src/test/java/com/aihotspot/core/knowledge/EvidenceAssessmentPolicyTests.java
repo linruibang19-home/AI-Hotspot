@@ -68,6 +68,43 @@ class EvidenceAssessmentPolicyTests {
         assertThat(assessed.get(1).claimText()).isEqualTo("品牌脱离合作体系");
     }
 
+    @Test
+    void unsupportedModelClaimIsDowngradedByEntailmentGuard() {
+        var evidence = List.of(Map.<String,Object>of(
+                "title", "模型推理性能更新",
+                "content_text", "官方公布新版推理服务延迟降低 25%，并增加批处理能力。",
+                "fact_status", "CONFIRMED",
+                "effective_published_at", java.sql.Timestamp.from(
+                        OffsetDateTime.now(ZoneOffset.UTC).toInstant())));
+        var model = Map.of(1, new EvidenceAssessmentPolicy.ModelAssessment(
+                1, "该公司完成百亿美元融资", "SUPPORTS", "模型声称来源支持融资消息"));
+
+        var assessment = EvidenceAssessmentPolicy.assess(evidence, model, "近期有什么变化？", 30).get(1);
+
+        assertThat(assessment.stance()).isEqualTo("UNVERIFIED");
+        assertThat(assessment.method()).isEqualTo("ENTAILMENT_GUARD");
+        assertThat(assessment.entailmentStatus()).isEqualTo("UNSUPPORTED");
+        assertThat(assessment.entailmentScore()).isZero();
+    }
+
+    @Test
+    void groundedClaimKeepsSupportAndRecordsEntailmentScore() {
+        var evidence = List.of(Map.<String,Object>of(
+                "title", "模型推理性能更新",
+                "content_text", "官方公布新版推理服务延迟降低 25%，并增加批处理能力。",
+                "fact_status", "CONFIRMED",
+                "effective_published_at", java.sql.Timestamp.from(
+                        OffsetDateTime.now(ZoneOffset.UTC).toInstant())));
+        var model = Map.of(1, new EvidenceAssessmentPolicy.ModelAssessment(
+                1, "新版推理服务延迟降低 25%", "SUPPORTS", "原文明确给出降幅"));
+
+        var assessment = EvidenceAssessmentPolicy.assess(evidence, model, "近期有什么变化？", 30).get(1);
+
+        assertThat(assessment.stance()).isEqualTo("SUPPORTS");
+        assertThat(assessment.entailmentStatus()).isEqualTo("ENTAILED");
+        assertThat(assessment.entailmentScore()).isGreaterThan(0.8);
+    }
+
     private Map<String,Object> row(String title, String factStatus, int ageDays) {
         return Map.of(
                 "title", title,

@@ -211,7 +211,8 @@
   .brand > span,
   .nav-label,
   .nav-text,
-  .sidebar-footer {
+  .sidebar-footer,
+  .sidebar-resizer {
     display: none;
   }
 
@@ -435,4 +436,3 @@
 @media (prefers-reduced-motion: reduce) {
   .skeleton { animation: none; }
 }
-

@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -152,6 +153,8 @@ public class ResearchService {
         GenerationResult generated = provider.real ? generate(normalized, plan, evidence,promptTemplate)
                 : new GenerationResult(extractiveAnswer(evidence),Map.of(),0,0,false,null,true);
         String answer = normalizeGeneratedAnswer(generated.answer());
+        boolean structuredFallbackApplied = provider.real && !generated.structuredOutputValid();
+        if (structuredFallbackApplied) answer = extractiveAnswer(evidence);
         long generationMs=elapsedMillis(stageStarted);
         stageTimings.put("generation",generationMs);
         if (provider.real) recordGenerationMetric(provider,generated,generationMs);
@@ -185,11 +188,15 @@ public class ResearchService {
         diagnostics.put("citationCoverage",coverage);
         diagnostics.put("referencedCitations",referenced.size());
         diagnostics.put("citationFallbackApplied",citationFallbackApplied);
-        diagnostics.put("generationFallbackApplied",generated.failed());
+        diagnostics.put("generationFallbackApplied",generated.failed() || structuredFallbackApplied);
         diagnostics.put("structuredOutputValid",generated.structuredOutputValid());
         diagnostics.put("promptVersion",promptTemplate.version());
         diagnostics.put("promptHash",promptTemplate.hash());
         diagnostics.put("evidenceStanceCounts",EvidenceAssessmentPolicy.stanceCounts(referencedAssessments));
+        diagnostics.put("claimEvidenceValidated",referencedAssessments.values().stream()
+                .filter(value -> !"NOT_EVALUATED".equals(value.entailmentStatus())).count());
+        diagnostics.put("claimEvidenceRejected",referencedAssessments.values().stream()
+                .filter(value -> "UNSUPPORTED".equals(value.entailmentStatus())).count());
         diagnostics.put("conflictDetected",disclosure.conflictDetected());
         jdbc.update("update research.query_run set answer_status='SUCCEEDED',answer=?,generation_provider=?,generation_model=?,candidate_count=?,citation_count=?,latency_ms=?,retrieval_diagnostics=?::jsonb,citation_coverage=?,completed_at=now() where id=?",
                 answer,provider.name,provider.model,candidates.size(),citations.size(),latency,json(diagnostics),coverage,runId);
@@ -355,10 +362,11 @@ public class ResearchService {
                 .replace("{{timeRange}}",plan.timeRangeLabel());
         String evidenceMessage=promptTemplate.evidenceTemplate().replace("{{evidence}}",context);
         try{
+            int outputBudget=Math.min(1800,1000+evidence.size()*100);
             Map<String,Object> response=ai.post().uri("/api/v1/generate").contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("system_prompt",promptTemplate.systemTemplate(),"user_prompt",task,
-                            "evidence",evidenceMessage,"max_tokens",1000)).retrieve().body(Map.class);
-            GenerationResult parsed=parseGeneration(String.valueOf(response.get("text")));
+                            "evidence",evidenceMessage,"max_tokens",outputBudget)).retrieve().body(Map.class);
+            GenerationResult parsed=parseGeneration(String.valueOf(response.get("text")),evidence.size());
             return new GenerationResult(parsed.answer(),parsed.assessments(),number(response.get("input_tokens")),
                     number(response.get("output_tokens")),false,null,parsed.structuredOutputValid());
         }catch(Exception error){
@@ -367,7 +375,7 @@ public class ResearchService {
         }
     }
 
-    @SuppressWarnings("unchecked") private GenerationResult parseGeneration(String raw){
+    @SuppressWarnings("unchecked") private GenerationResult parseGeneration(String raw,int evidenceCount){
         if(raw==null||raw.isBlank())return new GenerationResult("",Map.of(),0,0,false,null,false);
         String normalized=raw.strip().replaceFirst("^```(?:json)?\\s*","").replaceFirst("\\s*```$","");
         try{
@@ -380,13 +388,25 @@ public class ResearchService {
             String answer=String.valueOf(parsed.getOrDefault("answer",""));
             Map<Integer,EvidenceAssessmentPolicy.ModelAssessment> assessments=new LinkedHashMap<>();
             Object values=parsed.get("evidenceAssessments");
-            if(values instanceof List<?> list)for(Object value:list)if(value instanceof Map<?,?> item){
-                int citationNo=number(item.get("citationNo"));if(citationNo<1)continue;
-                assessments.put(citationNo,new EvidenceAssessmentPolicy.ModelAssessment(citationNo,
-                        text(item.get("claimText"),""),text(item.get("stance"),"SUPPORTS"),
-                        text(item.get("reason"),"")));
+            boolean assessmentsValid=values instanceof List<?> list&&!list.isEmpty();
+            if(values instanceof List<?> list)for(Object value:list){
+                if(!(value instanceof Map<?,?> item)){assessmentsValid=false;continue;}
+                int citationNo=number(item.get("citationNo"));
+                String claim=text(item.get("claimText"),"");
+                String stance=text(item.get("stance"),"").toUpperCase(Locale.ROOT);
+                String reason=text(item.get("reason"),"");
+                if(citationNo<1||citationNo>evidenceCount||claim.isBlank()||reason.isBlank()
+                        ||!Set.of("SUPPORTS","REFUTES","UNVERIFIED").contains(stance)){
+                    assessmentsValid=false;
+                    continue;
+                }
+                assessments.put(citationNo,new EvidenceAssessmentPolicy.ModelAssessment(
+                        citationNo,claim,stance,reason));
             }
-            return new GenerationResult(answer,assessments,0,0,false,null,!answer.isBlank());
+            Set<Integer> referenced=citedNumbers(answer);
+            boolean structuredValid=!answer.isBlank()&&!referenced.isEmpty()&&assessmentsValid
+                    &&assessments.keySet().containsAll(referenced);
+            return new GenerationResult(answer,assessments,0,0,false,null,structuredValid);
         }catch(Exception ignored){return new GenerationResult(raw,Map.of(),0,0,false,null,false);}
     }
 
@@ -450,30 +470,39 @@ public class ResearchService {
             String quote = String.valueOf(row.get("content_text"));
             double score = ((Number) row.get("score")).doubleValue();
             UUID citationId=UUID.randomUUID();
-            jdbc.update("insert into research.citation(id,query_run_id,chunk_id,citation_no,quote_text,retrieval_score,rerank_score,support_status) values(?,?,?,?,?,?,?,'SUPPORTED')",
+            jdbc.update("insert into research.citation(id,query_run_id,chunk_id,citation_no,quote_text,retrieval_score,rerank_score,support_status,source_title,source_name,source_url,source_published_at,provenance_status) values(?,?,?,?,?,?,?,'SUPPORTED',?,?,?,?,'VERIFIED')",
                     citationId, runId, row.get("chunk_id"), citationNo,
-                    quote.substring(0, Math.min(500, quote.length())), score, score);
+                    quote.substring(0, Math.min(500, quote.length())), score, score,
+                    row.get("title"),row.get("source_name"),row.get("source_url"),row.get("effective_published_at"));
             EvidenceAssessmentPolicy.Assessment assessment=assessments.get(citationNo);
-            jdbc.update("insert into research.evidence_assessment(citation_id,claim_text,evidence_stance,freshness_status,assessment_reason,assessment_method) values(?,?,?,?,?,?)",
-                    citationId,assessment.claimText(),assessment.stance(),assessment.freshnessStatus(),assessment.reason(),assessment.method());
+            jdbc.update("insert into research.evidence_assessment(citation_id,claim_text,evidence_stance,freshness_status,assessment_reason,assessment_method,entailment_status,entailment_score) values(?,?,?,?,?,?,?,?)",
+                    citationId,assessment.claimText(),assessment.stance(),assessment.freshnessStatus(),assessment.reason(),
+                    assessment.method(),assessment.entailmentStatus(),assessment.entailmentScore());
             result.add(new Citation(citationNo, String.valueOf(row.get("title")),
                     String.valueOf(row.get("source_name")), String.valueOf(row.get("source_url")),
                     quote.substring(0, Math.min(360, quote.length())), score,
                     String.valueOf(row.get("effective_published_at")), "SUPPORTED",assessment.stance(),
-                    assessment.freshnessStatus(),assessment.claimText(),assessment.reason()));
+                    assessment.freshnessStatus(),assessment.claimText(),assessment.reason(),
+                    assessment.entailmentStatus(),assessment.entailmentScore(),"VERIFIED"));
         }
         return result;
     }
     private List<Citation> citations(UUID runId) {
         return jdbc.query("""
-            select c.citation_no,d.title,se.name source_name,ch.source_url,c.quote_text,
-              coalesce(c.rerank_score,c.retrieval_score,0) support_score,ch.effective_published_at,
+            select c.citation_no,coalesce(c.source_title,d.title,'历史来源不可追溯') title,
+              coalesce(c.source_name,se.name,'历史来源不可追溯') source_name,
+              coalesce(c.source_url,ch.source_url,'') source_url,c.quote_text,
+              coalesce(c.rerank_score,c.retrieval_score,0) support_score,
+              coalesce(c.source_published_at,ch.effective_published_at) effective_published_at,
               c.support_status,coalesce(ea.evidence_stance,'UNVERIFIED') evidence_stance,
               coalesce(ea.freshness_status,'UNKNOWN') freshness_status,
-              coalesce(ea.claim_text,'') claim_text,coalesce(ea.assessment_reason,'') assessment_reason
+              coalesce(ea.claim_text,'') claim_text,coalesce(ea.assessment_reason,'') assessment_reason,
+              coalesce(ea.entailment_status,'NOT_EVALUATED') entailment_status,
+              coalesce(ea.entailment_score,0) entailment_score,
+              coalesce(c.provenance_status,'LEGACY_MISSING') provenance_status
             from research.citation c
-            join knowledge.chunk ch on ch.id=c.chunk_id
-            join knowledge.document d on d.id=ch.document_id
+            left join knowledge.chunk ch on ch.id=c.chunk_id
+            left join knowledge.document d on d.id=ch.document_id
             left join source.source_entity se on se.id=ch.source_entity_id
             left join research.evidence_assessment ea on ea.citation_id=c.id
             where c.query_run_id=? order by c.citation_no
@@ -482,7 +511,8 @@ public class ResearchService {
                     rs.getDouble("support_score"),String.valueOf(rs.getObject("effective_published_at")),
                     rs.getString("support_status"),rs.getString("evidence_stance"),
                     rs.getString("freshness_status"),rs.getString("claim_text"),
-                    rs.getString("assessment_reason")),runId);
+                    rs.getString("assessment_reason"),rs.getString("entailment_status"),
+                    rs.getDouble("entailment_score"),rs.getString("provenance_status")),runId);
     }
     private Map<String,Object> diagnostics(RagQueryPlanner.Plan plan,List<Map<String,Object>> candidates,List<Map<String,Object>> reranked,List<Map<String,Object>> evidence,Map<String,Long> stageTimings){Map<String,Object> map=new LinkedHashMap<>();map.put("fusion","RRF+RERANK");map.put("timeRangeDays",plan.days());map.put("timeRangeKind",plan.rangeKind());map.put("timeRangeLabel",plan.timeRangeLabel());map.put("windowStart",plan.windowStart()==null?null:plan.windowStart().toString());map.put("windowEnd",plan.windowEnd()==null?null:plan.windowEnd().toString());map.put("queryIntent",plan.intent());map.put("candidateCount",candidates.size());map.put("rerankedCount",reranked.size());map.put("contextCount",evidence.size());map.put("sourceCount",evidence.stream().map(row->row.get("source_entity_id")).distinct().count());map.put("eventCount",evidence.stream().map(row->row.get("event_cluster_id")).filter(v->v!=null).distinct().count());map.put("officialCount",evidence.stream().filter(row->List.of("OFFICIAL","FIRST_PARTY").contains(String.valueOf(row.get("source_official_level")))).count());map.put("stageTimingsMs",new LinkedHashMap<>(stageTimings));return map;}
     private static long elapsedMillis(long startedNanos){return Math.max(0,(System.nanoTime()-startedNanos)/1_000_000);}
@@ -506,7 +536,8 @@ public class ResearchService {
     private record RetrievalResult(List<Map<String,Object>> rows,long embeddingMs,long databaseMs){}
     public record Citation(int citationNo,String title,String sourceName,String sourceUrl,String quote,double supportScore,
                            String publishedAt,String supportStatus,String evidenceStance,String freshnessStatus,
-                           String claimText,String assessmentReason){}
+                           String claimText,String assessmentReason,String entailmentStatus,double entailmentScore,
+                           String provenanceStatus){}
     public record ResearchSessionSummary(UUID id,String title,String status,OffsetDateTime createdAt,
                                          OffsetDateTime updatedAt,String latestQuestion,
                                          String latestAnswerStatus,int queryCount){}
