@@ -155,6 +155,30 @@ test("research restores every turn and does not overstate evidence verification"
   assert.match(styles, /\.evidence-limit-banner/);
 });
 
+test("subscription, agent and research product workspaces expose task-oriented UX", () => {
+  const workspaces = readFileSync("src/components/product-workspaces.tsx", "utf8");
+  const styles = readFileSync("src/app/styles/public-product.css", "utf8");
+  assert.match(workspaces, /\/subscriptions\/options/);
+  assert.match(workspaces, /\/preview/);
+  assert.match(workspaces, /\/deliveries/);
+  assert.match(workspaces, /method:"DELETE"/);
+  assert.match(workspaces, /TASK BUILDER/);
+  assert.match(workspaces, /允许工具/);
+  assert.match(workspaces, /执行前确认/);
+  assert.match(workspaces, /research-scope-toggle/);
+  assert.doesNotMatch(workspaces, /RESEARCH_PROMPTS/);
+  assert.match(styles, /\.subscription-insight-grid/);
+  assert.match(styles, /\.agent-task-builder/);
+  assert.match(styles, /\.research-scope-toggle/);
+});
+
+test("public feed filters use a larger readable control treatment", () => {
+  const styles = readFileSync("src/app/styles/public-product.css", "utf8");
+  assert.match(styles, /\.featured-toolbar \.tab,.all-filterbar \.tab/);
+  assert.match(styles, /font-size: 14px/);
+  assert.match(styles, /min-height: 40px/);
+});
+
 test("M5 content governance uses real queues, events and ticket APIs", () => {
   const page = readFileSync("src/app/admin/content/page.tsx", "utf8");
   assert.match(page, /apiFetch<Response>\("\/admin\/content\?limit=100"\)/);

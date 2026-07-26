@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -20,8 +21,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class SubscriptionController {
     private final SubscriptionService service; public SubscriptionController(SubscriptionService service){this.service=service;}
     @GetMapping("/api/v1/subscriptions") @PreAuthorize("hasAuthority('subscription:manage')") public List<Map<String,Object>> list(@AuthenticationPrincipal AppUserPrincipal user){return service.list(user.id());}
+    @GetMapping("/api/v1/subscriptions/options") @PreAuthorize("hasAuthority('subscription:manage')") public Map<String,Object> options(){return service.options();}
     @PostMapping("/api/v1/subscriptions") @PreAuthorize("hasAuthority('subscription:manage')") public Map<String,Object> create(@Valid @RequestBody SubscriptionService.SubscriptionRequest request,@AuthenticationPrincipal AppUserPrincipal user){return Map.of("id",service.create(user.id(),request));}
+    @PutMapping("/api/v1/subscriptions/{id}") @PreAuthorize("hasAuthority('subscription:manage')") public void update(@PathVariable UUID id,@Valid @RequestBody SubscriptionService.SubscriptionRequest request,@AuthenticationPrincipal AppUserPrincipal user){service.update(user.id(),id,request);}
+    @DeleteMapping("/api/v1/subscriptions/{id}") @PreAuthorize("hasAuthority('subscription:manage')") public void delete(@PathVariable UUID id,@AuthenticationPrincipal AppUserPrincipal user){service.delete(user.id(),id);}
     @PutMapping("/api/v1/subscriptions/{id}/status") @PreAuthorize("hasAuthority('subscription:manage')") public void status(@PathVariable UUID id,@RequestBody Map<String,String> body,@AuthenticationPrincipal AppUserPrincipal user){service.setStatus(user.id(),id,body.get("status"));}
+    @GetMapping("/api/v1/subscriptions/{id}/preview") @PreAuthorize("hasAuthority('subscription:manage')") public List<Map<String,Object>> preview(@PathVariable UUID id,@AuthenticationPrincipal AppUserPrincipal user){return service.preview(user.id(),id);}
+    @GetMapping("/api/v1/subscriptions/{id}/deliveries") @PreAuthorize("hasAuthority('subscription:manage')") public List<Map<String,Object>> deliveryHistory(@PathVariable UUID id,@AuthenticationPrincipal AppUserPrincipal user){return service.deliveryHistory(user.id(),id);}
     @PostMapping("/api/v1/subscriptions/{id}/send-now") @PreAuthorize("hasAuthority('subscription:manage')") public Map<String,Object> sendNow(@PathVariable UUID id,@AuthenticationPrincipal AppUserPrincipal user){return service.sendNow(user.id(),id);}
     @GetMapping("/api/v1/admin/deliveries") @PreAuthorize("hasRole('ADMIN')") public List<Map<String,Object>> deliveries(){return service.deliveries();}
     @PostMapping("/api/v1/admin/deliveries/{id}/retry") @PreAuthorize("hasRole('ADMIN')") public void retry(@PathVariable UUID id){service.retry(id);}

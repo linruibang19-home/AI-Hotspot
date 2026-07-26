@@ -48,6 +48,9 @@ public class AgentToolExecutor {
                             LocalTime.of(9, 0),
                             null,
                             List.of(),
+                            List.of(),
+                            List.of(),
+                            List.of(),
                             12));
             return new ExecutionResult(
                     Map.of("subscriptionId", id, "status", "ACTIVE"),

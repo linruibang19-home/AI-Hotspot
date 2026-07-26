@@ -571,6 +571,53 @@ paths:
       responses:
         "200": { description: 订阅已创建, content: { application/json: { schema: { $ref: "#/components/schemas/IdResponse" } } } }
         "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/v1/subscriptions/options:
+    get:
+      tags: [Subscriptions]
+      operationId: getSubscriptionOptions
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 可订阅的主题和信源, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/subscriptions/{id}:
+    put:
+      tags: [Subscriptions]
+      operationId: updateSubscription
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UuidPathId" }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubscriptionRequest" }
+      responses:
+        "200": { description: 订阅已更新 }
+    delete:
+      tags: [Subscriptions]
+      operationId: deleteSubscription
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UuidPathId" }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      responses:
+        "200": { description: 订阅及其投递记录已删除 }
+  /api/v1/subscriptions/{id}/preview:
+    get:
+      tags: [Subscriptions]
+      operationId: previewSubscription
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/UuidPathId" }]
+      responses:
+        "200": { description: 按当前范围筛选的真实公开内容预览, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+  /api/v1/subscriptions/{id}/deliveries:
+    get:
+      tags: [Subscriptions]
+      operationId: listSubscriptionDeliveries
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/UuidPathId" }]
+      responses:
+        "200": { description: 当前用户该订阅的最近投递记录, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
   /api/v1/subscriptions/{id}/status:
     put:
       tags: [Subscriptions]
@@ -587,7 +634,7 @@ paths:
               type: object
               required: [status]
               properties:
-                status: { type: string, enum: [ACTIVE, PAUSED, CANCELLED] }
+                status: { type: string, enum: [ACTIVE, PAUSED, UNSUBSCRIBED] }
       responses:
         "200": { description: 状态已更新 }
   /api/v1/subscriptions/{id}/send-now:
@@ -1120,6 +1167,9 @@ components:
         sendTime: { type: string, format: time }
         weekday: { type: [integer, "null"], minimum: 1, maximum: 7 }
         topicSlugs: { type: array, items: { type: string } }
+        sourceLevels: { type: array, items: { type: string, enum: [OFFICIAL, FIRST_PARTY, THIRD_PARTY] } }
+        sourceEntityIds: { type: array, items: { type: string, format: uuid } }
+        contentTypes: { type: array, items: { type: string, enum: [ARTICLE, RESEARCH, RELEASE, TUTORIAL, OTHER] } }
         maxItems: { type: [integer, "null"], minimum: 1 }
     ResearchQueryRequest:
       type: object
