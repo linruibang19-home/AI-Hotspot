@@ -22,6 +22,8 @@ public class ProductionSecurityEnvironmentPostProcessor
             "change-me-in-local-env",
             "local-change-me",
             "local-development-unsubscribe-secret",
+            "local-development-model-credential-master-key",
+            "ai-hotspot-local-internal-token",
             "ai-hotspot-local-email-code-pepper",
             "replace-with-a-long-random-secret-in-production");
 
@@ -64,6 +66,8 @@ public class ProductionSecurityEnvironmentPostProcessor
         requireStrong(environment, violations, "EMAIL_CODE_PEPPER", 32);
         requireStrong(environment, violations, "UNSUBSCRIBE_SECRET", 32);
         requireStrong(environment, violations, "SMTP_PASSWORD", 16);
+        requireStrong(environment, violations, "MODEL_CREDENTIAL_MASTER_KEY", 32);
+        requireStrong(environment, violations, "AI_INTERNAL_API_TOKEN", 32);
         requirePresent(environment, violations, "SMTP_USERNAME");
 
         String mailProvider = value(environment, "MAIL_PROVIDER");

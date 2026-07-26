@@ -59,6 +59,8 @@ class ProductionSecurityEnvironmentPostProcessorTests {
                 Map.entry("RABBITMQ_DEFAULT_PASS", "rabbit-credential-2026"),
                 Map.entry("EMAIL_CODE_PEPPER", "email-code-pepper-with-32-characters"),
                 Map.entry("UNSUBSCRIBE_SECRET", "unsubscribe-secret-with-32-characters"),
+                Map.entry("MODEL_CREDENTIAL_MASTER_KEY", "model-credential-master-key-with-32-characters"),
+                Map.entry("AI_INTERNAL_API_TOKEN", "ai-internal-api-token-with-32-characters"),
                 Map.entry("MAIL_PROVIDER", "smtp"),
                 Map.entry("SMTP_HOST", "smtp.example.com"),
                 Map.entry("SMTP_AUTH", "true"),

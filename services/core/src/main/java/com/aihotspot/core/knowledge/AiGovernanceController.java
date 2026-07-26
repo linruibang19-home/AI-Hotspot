@@ -32,18 +32,55 @@ import tools.jackson.databind.ObjectMapper;
 public class AiGovernanceController {
     private final JdbcTemplate jdbc; private final KnowledgeIndexService indexer; private final ResearchService research;
     private final ResearchFeedbackService feedback;
+    private final ProviderConnectionService providerConnections;
     private final OutboxStore outbox; private final ObjectMapper objectMapper; private final RestClient ai;
     public AiGovernanceController(JdbcTemplate jdbc,KnowledgeIndexService indexer,ResearchService research,
-            ResearchFeedbackService feedback,OutboxStore outbox,ObjectMapper objectMapper,
+            ResearchFeedbackService feedback,ProviderConnectionService providerConnections,
+            OutboxStore outbox,ObjectMapper objectMapper,
             @Value("${ai-hotspot.ai-base-url}") String aiBaseUrl){
         this.jdbc=jdbc;this.indexer=indexer;this.research=research;this.feedback=feedback;
+        this.providerConnections=providerConnections;
         this.outbox=outbox;this.objectMapper=objectMapper;
         this.ai=RestClient.builder().baseUrl(aiBaseUrl).requestFactory(new SimpleClientHttpRequestFactory()).build();
     }
-    @GetMapping("/configs") public List<Map<String,Object>> configs(){return jdbc.queryForList("select id,task_type,provider_name,model_name,base_url,credential_ref,status,timeout_ms,parameters::text parameters,updated_at from knowledge.provider_config order by task_type");}
+    @GetMapping("/configs") public List<Map<String,Object>> configs(){return jdbc.queryForList("select id,task_type,provider_name,model_name,base_url,credential_ref,connection_id,status,timeout_ms,parameters::text parameters,updated_at from knowledge.provider_config order by task_type");}
     @PutMapping("/configs") public void save(@RequestBody ConfigRequest body,@AuthenticationPrincipal AppUserPrincipal user){
         jdbc.update("update knowledge.provider_config set provider_name=?,model_name=?,base_url=?,credential_ref=?,status=?,timeout_ms=?,parameters=?::jsonb,updated_by=?,updated_at=now() where task_type=?",
             body.providerName(),body.modelName(),body.baseUrl(),body.credentialRef(),body.status(),body.timeoutMs(),body.parametersJson()==null?"{}":body.parametersJson(),user.id(),body.taskType());
+    }
+    @GetMapping("/connections")
+    public List<ProviderConnectionService.ConnectionView> connections(){
+        return providerConnections.platformConnections();
+    }
+    @PostMapping("/connections")
+    public ProviderConnectionService.ConnectionView createConnection(
+            @RequestBody ProviderConnectionService.SaveConnection body,
+            @AuthenticationPrincipal AppUserPrincipal user){
+        return providerConnections.createPlatform(user,body);
+    }
+    @PutMapping("/connections/{connectionId}")
+    public ProviderConnectionService.ConnectionView updateConnection(
+            @PathVariable UUID connectionId,
+            @RequestBody ProviderConnectionService.SaveConnection body,
+            @AuthenticationPrincipal AppUserPrincipal user){
+        return providerConnections.updatePlatform(connectionId,user,body);
+    }
+    @PostMapping("/connections/{connectionId}/test")
+    public ProviderConnectionService.TestResult testConnection(@PathVariable UUID connectionId){
+        return providerConnections.test(connectionId);
+    }
+    @PostMapping("/connections/{connectionId}/status")
+    public ProviderConnectionService.ConnectionView setConnectionStatus(
+            @PathVariable UUID connectionId,@RequestBody ConnectionStatusRequest body,
+            @AuthenticationPrincipal AppUserPrincipal user){
+        return providerConnections.setStatus(connectionId,user,body.status());
+    }
+    @PostMapping("/connections/{connectionId}/assign")
+    public ProviderConnectionService.ConnectionView assignConnection(
+            @PathVariable UUID connectionId,@RequestBody ConnectionAssignmentRequest body,
+            @AuthenticationPrincipal AppUserPrincipal user){
+        return providerConnections.assign(connectionId,user,body.taskType(),body.modelName(),
+                body.timeoutMs(),body.inputCostPerMillion(),body.outputCostPerMillion());
     }
     @PostMapping("/reindex") public KnowledgeIndexService.IndexResult reindex(){return indexer.indexBatch(500);}
     @PostMapping("/reprocess")
@@ -173,14 +210,25 @@ public class AiGovernanceController {
             from knowledge.document d left join knowledge.chunk ch on ch.document_id=d.id
             """);
         List<Map<String,Object>> providerBreakdown=jdbc.queryForList("""
-            select capability,provider_name,model_name,count(*) calls,
+            select capability,provider_name,model_name,credential_scope,connection_id,count(*) calls,
               count(*) filter(where status<>'SUCCEEDED') failures,
               coalesce(round(100.0*count(*) filter(where status<>'SUCCEEDED')/nullif(count(*),0),2),0) error_rate,
               coalesce(round(avg(latency_ms)),0) avg_latency_ms,
               coalesce(sum(input_tokens),0) input_tokens,coalesce(sum(output_tokens),0) output_tokens,
               coalesce(sum(estimated_cost),0) estimated_cost
             from knowledge.provider_metric where recorded_at>=now()-(? * interval '1 hour')
-            group by capability,provider_name,model_name order by calls desc,capability
+            group by capability,provider_name,model_name,credential_scope,connection_id
+            order by calls desc,capability
+            """,windowHours);
+        List<Map<String,Object>> usageOwnership=jdbc.queryForList("""
+            select credential_scope,count(*) calls,
+              coalesce(sum(input_tokens),0) input_tokens,
+              coalesce(sum(output_tokens),0) output_tokens,
+              coalesce(sum(estimated_cost),0) estimated_cost,
+              count(distinct actor_user_id) users
+            from knowledge.provider_metric
+            where recorded_at>=now()-(? * interval '1 hour')
+            group by credential_scope order by calls desc
             """,windowHours);
         List<Map<String,Object>> latencyTrend=jdbc.queryForList("""
             select to_char(date_trunc('hour',created_at),'MM-DD HH24:00') bucket,count(*) queries,
@@ -214,6 +262,7 @@ public class AiGovernanceController {
         result.put("windowHours",windowHours);result.put("generatedAt",OffsetDateTime.now());
         result.put("summary",summary);result.put("rag",rag);result.put("index",index);
         result.put("providerBreakdown",providerBreakdown);result.put("latencyTrend",latencyTrend);
+        result.put("usageOwnership",usageOwnership);
         result.put("noEvidenceReasons",noEvidenceReasons);result.put("slowQueries",slowQueries);
         result.put("feedbackSummary",feedback.summary(windowHours));
         result.put("feedbackSamples",feedback.samples(windowHours,30));
@@ -381,6 +430,9 @@ public class AiGovernanceController {
         return Map.of("runId",run,"passed",passed,"metrics",metricMap);
     }
     public record ConfigRequest(String taskType,String providerName,String modelName,String baseUrl,String credentialRef,String status,Integer timeoutMs,String parametersJson){}
+    public record ConnectionStatusRequest(String status){}
+    public record ConnectionAssignmentRequest(String taskType,String modelName,Integer timeoutMs,
+                                              Double inputCostPerMillion,Double outputCostPerMillion){}
     public record FeedbackTriageRequest(String status){}
     private static boolean isReal(Map<String,Object> provider){String name=String.valueOf(provider.getOrDefault("provider",""));return !name.isBlank()&&!List.of("mock","test","fixture").contains(name.toLowerCase());}
     private static int number(Object value,int fallback){if(value instanceof Number number)return number.intValue();try{return Integer.parseInt(String.valueOf(value));}catch(Exception ignored){return fallback;}}

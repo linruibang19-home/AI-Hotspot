@@ -125,6 +125,7 @@ services:
       RERANK_READ_TIMEOUT_SECONDS: ${RERANK_READ_TIMEOUT_SECONDS:-15}
       RERANK_TOTAL_TIMEOUT_SECONDS: ${RERANK_TOTAL_TIMEOUT_SECONDS:-20}
       PROVIDER_RETRY_ATTEMPTS: ${PROVIDER_RETRY_ATTEMPTS:-1}
+      AI_INTERNAL_API_TOKEN: ${AI_INTERNAL_API_TOKEN:-ai-hotspot-local-internal-token}
     ports:
       - "127.0.0.1:18000:8000"
     depends_on:
@@ -224,6 +225,8 @@ services:
       BOOTSTRAP_ADMIN_DISPLAY_NAME: ${BOOTSTRAP_ADMIN_DISPLAY_NAME:-AI Hotspot 管理员}
       SOURCE_CATALOG_ENABLED: ${SOURCE_CATALOG_ENABLED:-true}
       SOURCE_CATALOG_OWNER_EMAIL: ${SOURCE_CATALOG_OWNER_EMAIL:-admin@aihotspot.local}
+      MODEL_CREDENTIAL_MASTER_KEY: ${MODEL_CREDENTIAL_MASTER_KEY:-local-development-model-credential-master-key}
+      AI_INTERNAL_API_TOKEN: ${AI_INTERNAL_API_TOKEN:-ai-hotspot-local-internal-token}
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:

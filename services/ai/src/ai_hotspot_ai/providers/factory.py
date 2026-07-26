@@ -8,6 +8,7 @@ from .mock import MockEmbeddingProvider, MockGenerationProvider, MockRerankProvi
 from .openai_compatible import OpenAICompatibleGenerationProvider
 from .remote import RemoteEmbeddingProvider, RemoteRerankProvider
 from .resilience import ProviderPolicy
+from ai_hotspot_ai.schemas import ProviderOverride
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +69,47 @@ def build_provider_registry(settings: Settings) -> ProviderRegistry:
         else MockRerankProvider()
     )
     return ProviderRegistry(generation=generation, embedding=embedding, rerank=rerank)
+
+
+def build_generation_override(config: ProviderOverride) -> GenerationProvider:
+    policy = _override_policy(config)
+    return OpenAICompatibleGenerationProvider(
+        config.base_url,
+        config.api_key,
+        config.model,
+        policy,
+        provider_name=config.provider_name,
+    )
+
+
+def build_embedding_override(config: ProviderOverride) -> EmbeddingProvider:
+    return RemoteEmbeddingProvider(
+        config.base_url,
+        config.api_key,
+        config.model,
+        _override_policy(config),
+        provider_name=config.provider_name,
+    )
+
+
+def build_rerank_override(config: ProviderOverride) -> RerankProvider:
+    return RemoteRerankProvider(
+        config.base_url,
+        config.api_key,
+        config.model,
+        _override_policy(config),
+        provider_name=config.provider_name,
+    )
+
+
+def _override_policy(config: ProviderOverride) -> ProviderPolicy:
+    total_seconds = config.timeout_ms / 1000
+    return ProviderPolicy(
+        min(3.0, total_seconds),
+        max(1.0, total_seconds - 1.0),
+        total_seconds,
+        config.retry_attempts,
+    )
 
 
 @lru_cache

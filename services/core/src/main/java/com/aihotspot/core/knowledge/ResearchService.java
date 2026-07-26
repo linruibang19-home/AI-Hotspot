@@ -33,11 +33,17 @@ public class ResearchService {
     private final JdbcTemplate jdbc;
     private final RestClient ai;
     private final ResearchFeedbackService feedback;
+    private final ProviderConnectionService providerConnections;
+    private final String aiInternalToken;
 
     public ResearchService(JdbcTemplate jdbc, ResearchFeedbackService feedback,
-                           @Value("${ai-hotspot.ai-base-url}") String aiBaseUrl) {
+                           ProviderConnectionService providerConnections,
+                           @Value("${ai-hotspot.ai-base-url}") String aiBaseUrl,
+                           @Value("${ai-hotspot.security.ai-internal-token:ai-hotspot-local-internal-token}") String aiInternalToken) {
         this.jdbc = jdbc;
         this.feedback = feedback;
+        this.providerConnections = providerConnections;
+        this.aiInternalToken = aiInternalToken;
         this.ai = RestClient.builder().baseUrl(aiBaseUrl).requestFactory(new SimpleClientHttpRequestFactory()).build();
     }
 
@@ -98,7 +104,8 @@ public class ResearchService {
 
     List<Map<String,Object>> evaluateRetrieval(AppUserPrincipal user, String query, Map<String,Object> filters, int limit) {
         RagQueryPlanner.Plan plan = RagQueryPlanner.plan(query, filters == null ? Map.of() : filters);
-        return diversify(rerank(plan.semanticQuery(), retrieve(user, plan, Math.max(limit * 4, 80)), Math.max(limit * 2, 40)), limit);
+        return diversify(rerank(plan.semanticQuery(), retrieve(user, plan, Math.max(limit * 4, 80)),
+                Math.max(limit * 2, 40),0,user.id(),null), limit);
     }
 
     @Transactional
@@ -130,10 +137,12 @@ public class ResearchService {
                 runId, sessionId, user.id(), normalized, plan.lexicalQuery(), json(filters), json(Map.of("userId",user.id(),"roles",user.roles())), json(retrievalConfig), json(plan.asMap()));
         stageTimings.put("permissionAndSession",elapsedMillis(stageStarted));
 
-        RetrievalResult retrieval = retrieveWithTimings(user,plan,64);
+        RetrievalResult retrieval = retrieveWithTimings(user,plan,64,runId);
         List<Map<String,Object>> candidates = retrieval.rows();
         stageTimings.put("embedding",retrieval.embeddingMs()); stageTimings.put("hybridRetrieval",retrieval.databaseMs());
-        stageStarted=System.nanoTime(); List<Map<String,Object>> reranked = rerank(plan.semanticQuery(), candidates, 32, minimumRerankResults); stageTimings.put("rerank",elapsedMillis(stageStarted));
+        stageStarted=System.nanoTime(); List<Map<String,Object>> reranked = rerank(
+                plan.semanticQuery(), candidates, 32, minimumRerankResults,user.id(),runId);
+        stageTimings.put("rerank",elapsedMillis(stageStarted));
         stageStarted=System.nanoTime(); List<Map<String,Object>> evidence = diversify(reranked, 8, maxPerSource); stageTimings.put("diversification",elapsedMillis(stageStarted));
         Map<String,Object> diagnostics = diagnostics(plan, candidates, reranked, evidence,stageTimings);
         if (evidence.isEmpty()) {
@@ -145,19 +154,19 @@ public class ResearchService {
             return new ResearchResult(runId,sessionId,noEvidence,"NO_EVIDENCE","none",List.of(),Duration.between(started,Instant.now()).toMillis(),diagnostics,0,0,BigDecimal.ZERO,null);
         }
 
-        Provider provider = provider();
+        Provider provider = provider(user.id());
         PromptTemplate promptTemplate = promptTemplate();
         jdbc.update("update research.query_run set prompt_version_id=?,prompt_version=?,prompt_hash=? where id=?",
                 promptTemplate.id(),promptTemplate.version(),promptTemplate.hash(),runId);
         stageStarted=System.nanoTime();
-        GenerationResult generated = provider.real ? generate(normalized, plan, evidence,promptTemplate)
+        GenerationResult generated = provider.real ? generate(normalized, plan, evidence,promptTemplate,provider)
                 : new GenerationResult(extractiveAnswer(evidence),Map.of(),0,0,false,null,true);
         String answer = normalizeGeneratedAnswer(generated.answer());
         boolean structuredFallbackApplied = provider.real && !generated.structuredOutputValid();
         if (structuredFallbackApplied) answer = extractiveAnswer(evidence);
         long generationMs=elapsedMillis(stageStarted);
         stageTimings.put("generation",generationMs);
-        if (provider.real) recordGenerationMetric(provider,generated,generationMs);
+        if (provider.real) recordGenerationMetric(provider,generated,generationMs,user.id(),runId);
         stageStarted=System.nanoTime();
         double coverage = citationCoverage(answer);
         stageTimings.put("citationValidation",elapsedMillis(stageStarted));
@@ -203,7 +212,7 @@ public class ResearchService {
         jdbc.update("update research.session set updated_at=now() where id=?",sessionId);
         return new ResearchResult(runId,sessionId,answer,"SUCCEEDED",provider.name,citations,latency,
                 diagnostics,generated.inputTokens(),generated.outputTokens(),
-                estimatedGenerationCost(generated.inputTokens(),generated.outputTokens()),null);
+                estimatedGenerationCost(provider.parametersJson(),generated.inputTokens(),generated.outputTokens()),null);
     }
 
     private UUID ensureSession(AppUserPrincipal user, UUID requested, String question) {
@@ -218,12 +227,13 @@ public class ResearchService {
     }
 
     private List<Map<String,Object>> retrieve(AppUserPrincipal user, RagQueryPlanner.Plan plan, int limit) {
-        return retrieveWithTimings(user,plan,limit).rows();
+        return retrieveWithTimings(user,plan,limit,null).rows();
     }
 
-    private RetrievalResult retrieveWithTimings(AppUserPrincipal user, RagQueryPlanner.Plan plan, int limit) {
+    private RetrievalResult retrieveWithTimings(AppUserPrincipal user, RagQueryPlanner.Plan plan, int limit,
+                                                UUID queryRunId) {
         String roles=user.roles().stream().map(role->"'"+role.replace("'","")+"'").reduce((a,b)->a+","+b).orElse("''");
-        long started=System.nanoTime(); String vector=queryEmbedding(plan.semanticQuery()); long embeddingMs=elapsedMillis(started);
+        long started=System.nanoTime(); String vector=queryEmbedding(plan.semanticQuery(),user.id(),queryRunId); long embeddingMs=elapsedMillis(started);
         String sql="""
             with eligible as (
               select ch.id chunk_id,ch.content_text,ch.source_url,d.title,s.name source_name,
@@ -271,42 +281,64 @@ public class ResearchService {
     }
 
     @SuppressWarnings("unchecked")
-    private String queryEmbedding(String query) {
+    private String queryEmbedding(String query,UUID actorUserId,UUID queryRunId) {
         long started=System.nanoTime();String providerName="unavailable";String providerModel="unknown";
+        ProviderConnectionService.RuntimeSelection selection=providerConnections.selection("EMBEDDING",actorUserId);
         try {
-            Map<String,Object> providers=ai.get().uri("/api/v1/providers").retrieve().body(Map.class);
-            Map<String,Object> embedding=(Map<String,Object>)providers.get("embedding");
-            if(isMock(embedding.get("provider"))) return null;
-            providerName=String.valueOf(embedding.get("provider"));providerModel=String.valueOf(embedding.get("model"));
-            Map<String,Object> response=ai.post().uri("/api/v1/embed").contentType(MediaType.APPLICATION_JSON).body(Map.of("texts",List.of(query))).retrieve().body(Map.class);
+            if(selection.dynamic()){
+                providerName=selection.provider();providerModel=selection.model();
+            }else{
+                Map<String,Object> providers=ai.get().uri("/api/v1/providers").retrieve().body(Map.class);
+                Map<String,Object> embedding=(Map<String,Object>)providers.get("embedding");
+                if(isMock(embedding.get("provider"))) return null;
+                providerName=String.valueOf(embedding.get("provider"));providerModel=String.valueOf(embedding.get("model"));
+            }
+            Map<String,Object> body=new LinkedHashMap<>();body.put("texts",List.of(query));
+            if(selection.dynamic())body.put("provider_override",selection.override());
+            RestClient.RequestBodySpec request=ai.post().uri("/api/v1/embed").contentType(MediaType.APPLICATION_JSON);
+            if(selection.dynamic())request.header("X-AI-Internal-Token",aiInternalToken);
+            Map<String,Object> response=request.body(body).retrieve().body(Map.class);
             List<Object> vectors=(List<Object>)response.getOrDefault("vectors",List.of());
             if(vectors.isEmpty())throw new IllegalStateException("empty embedding vectors");
             List<Object> values=(List<Object>)vectors.get(0);
             if(values.size()!=1024)throw new IllegalStateException("unexpected embedding dimensions");
-            recordProviderMetric("EMBEDDING",providerName,providerModel,"SUCCEEDED",elapsedMillis(started),0,0,null,BigDecimal.ZERO);
+            recordProviderMetric("EMBEDDING",providerName,providerModel,"SUCCEEDED",elapsedMillis(started),
+                    0,0,null,BigDecimal.ZERO,selection.connectionId(),actorUserId,queryRunId,selection.scope());
             return values.stream().map(String::valueOf).reduce("[",(left,right)->left.equals("[")?left+right:left+","+right)+"]";
         }catch(Exception error){
-            if(!"unavailable".equals(providerName))recordProviderMetric("EMBEDDING",providerName,providerModel,"FAILED",elapsedMillis(started),0,0,providerErrorCode(error,"EMBEDDING"),BigDecimal.ZERO);
+            if(!"unavailable".equals(providerName))recordProviderMetric("EMBEDDING",providerName,providerModel,
+                    "FAILED",elapsedMillis(started),0,0,providerErrorCode(error,"EMBEDDING"),
+                    BigDecimal.ZERO,selection.connectionId(),actorUserId,queryRunId,selection.scope());
             return null;
         }
     }
 
     @SuppressWarnings("unchecked")
     private List<Map<String,Object>> rerank(String query,List<Map<String,Object>> rows,int topN) {
-        return rerank(query,rows,topN,0);
+        return rerank(query,rows,topN,0,null,null);
     }
 
     @SuppressWarnings("unchecked")
-    private List<Map<String,Object>> rerank(String query,List<Map<String,Object>> rows,int topN,int minimumResults) {
+    private List<Map<String,Object>> rerank(String query,List<Map<String,Object>> rows,int topN,int minimumResults,
+                                           UUID actorUserId,UUID queryRunId) {
         if(rows.isEmpty())return rows;
         long started=System.nanoTime();String providerName="unavailable";String providerModel="unknown";
+        ProviderConnectionService.RuntimeSelection selection=providerConnections.selection("RERANK",actorUserId);
         try {
-            Map<String,Object> providers=ai.get().uri("/api/v1/providers").retrieve().body(Map.class);
-            Map<String,Object> config=(Map<String,Object>)providers.get("rerank");
-            if(isMock(config.get("provider")))return rows.subList(0,Math.min(topN,rows.size()));
-            providerName=String.valueOf(config.get("provider"));providerModel=String.valueOf(config.get("model"));
+            if(selection.dynamic()){
+                providerName=selection.provider();providerModel=selection.model();
+            }else{
+                Map<String,Object> providers=ai.get().uri("/api/v1/providers").retrieve().body(Map.class);
+                Map<String,Object> config=(Map<String,Object>)providers.get("rerank");
+                if(isMock(config.get("provider")))return rows.subList(0,Math.min(topN,rows.size()));
+                providerName=String.valueOf(config.get("provider"));providerModel=String.valueOf(config.get("model"));
+            }
             List<Map<String,Object>> docs=rows.stream().map(row->{String text=String.valueOf(row.get("content_text"));return Map.<String,Object>of("id",String.valueOf(row.get("chunk_id")),"text",text.substring(0,Math.min(900,text.length())));}).toList();
-            Map<String,Object> response=ai.post().uri("/api/v1/rerank").contentType(MediaType.APPLICATION_JSON).body(Map.of("query",query,"documents",docs,"top_n",topN)).retrieve().body(Map.class);
+            Map<String,Object> body=new LinkedHashMap<>();body.put("query",query);body.put("documents",docs);body.put("top_n",topN);
+            if(selection.dynamic())body.put("provider_override",selection.override());
+            RestClient.RequestBodySpec request=ai.post().uri("/api/v1/rerank").contentType(MediaType.APPLICATION_JSON);
+            if(selection.dynamic())request.header("X-AI-Internal-Token",aiInternalToken);
+            Map<String,Object> response=request.body(body).retrieve().body(Map.class);
             Map<String,Map<String,Object>> byId=new HashMap<>(); rows.forEach(row->byId.put(String.valueOf(row.get("chunk_id")),row));
             List<Map<String,Object>> ranked=new ArrayList<>();
             for(Object value:(List<Object>)response.getOrDefault("results",List.of())){
@@ -319,10 +351,13 @@ public class ResearchService {
             List<Map<String,Object>> qualified=ranked.stream().filter(row->((Number)row.get("score")).doubleValue()>=floor).toList();
             int resultSize=Math.min(topN,Math.max(Math.min(minimumResults,ranked.size()),qualified.size()));
             List<Map<String,Object>> result=ranked.subList(0,resultSize);
-            recordProviderMetric("RERANK",providerName,providerModel,"SUCCEEDED",elapsedMillis(started),0,0,null,BigDecimal.ZERO);
+            recordProviderMetric("RERANK",providerName,providerModel,"SUCCEEDED",elapsedMillis(started),
+                    0,0,null,BigDecimal.ZERO,selection.connectionId(),actorUserId,queryRunId,selection.scope());
             return result;
         }catch(Exception error){
-            if(!"unavailable".equals(providerName))recordProviderMetric("RERANK",providerName,providerModel,"FAILED",elapsedMillis(started),0,0,providerErrorCode(error,"RERANK"),BigDecimal.ZERO);
+            if(!"unavailable".equals(providerName))recordProviderMetric("RERANK",providerName,providerModel,
+                    "FAILED",elapsedMillis(started),0,0,providerErrorCode(error,"RERANK"),
+                    BigDecimal.ZERO,selection.connectionId(),actorUserId,queryRunId,selection.scope());
             return rows.subList(0,Math.min(topN,rows.size()));
         }
     }
@@ -339,7 +374,22 @@ public class ResearchService {
         return result;
     }
 
-    @SuppressWarnings("unchecked") private Provider provider(){try{Map<String,Object> response=ai.get().uri("/api/v1/providers").retrieve().body(Map.class);Map<String,Object> generation=(Map<String,Object>)response.get("generation");String name=String.valueOf(generation.get("provider"));return new Provider(name,String.valueOf(generation.get("model")),!isMock(name));}catch(Exception ignored){return new Provider("extractive-fallback","none",false);}}
+    @SuppressWarnings("unchecked") private Provider provider(UUID actorUserId){
+        ProviderConnectionService.RuntimeSelection selection=providerConnections.selection("RAG_GENERATION",actorUserId);
+        if(selection.dynamic()){
+            return new Provider(selection.provider(),selection.model(),true,selection.connectionId(),
+                    selection.scope(),selection.override(),selection.parametersJson());
+        }
+        try{
+            Map<String,Object> response=ai.get().uri("/api/v1/providers").retrieve().body(Map.class);
+            Map<String,Object> generation=(Map<String,Object>)response.get("generation");
+            String name=String.valueOf(generation.get("provider"));
+            return new Provider(name,String.valueOf(generation.get("model")),!isMock(name),
+                    selection.connectionId(),selection.scope(),null,selection.parametersJson());
+        }catch(Exception ignored){
+            return new Provider("extractive-fallback","none",false,null,"FALLBACK",null,"{}");
+        }
+    }
     private PromptTemplate promptTemplate(){
         return jdbc.queryForObject("""
             select id,version,system_template,task_template,evidence_template,template_hash
@@ -355,7 +405,8 @@ public class ResearchService {
                 rs.getString("template_hash")));
     }
 
-    @SuppressWarnings("unchecked") private GenerationResult generate(String question,RagQueryPlanner.Plan plan,List<Map<String,Object>> evidence,PromptTemplate promptTemplate){
+    @SuppressWarnings("unchecked") private GenerationResult generate(String question,RagQueryPlanner.Plan plan,
+            List<Map<String,Object>> evidence,PromptTemplate promptTemplate,Provider provider){
         StringBuilder context=new StringBuilder();for(int i=0;i<evidence.size();i++){Map<String,Object> row=evidence.get(i);String text=String.valueOf(row.get("content_text"));context.append('[').append(i+1).append("] ").append(row.get("source_name")).append(" | ").append(row.get("effective_published_at")).append(" | fact_status=").append(row.get("fact_status")).append("\n").append(text,0,Math.min(900,text.length())).append("\n\n");}
         String task=promptTemplate.taskTemplate()
                 .replace("{{question}}",question)
@@ -363,9 +414,13 @@ public class ResearchService {
         String evidenceMessage=promptTemplate.evidenceTemplate().replace("{{evidence}}",context);
         try{
             int outputBudget=Math.min(1800,1000+evidence.size()*100);
-            Map<String,Object> response=ai.post().uri("/api/v1/generate").contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("system_prompt",promptTemplate.systemTemplate(),"user_prompt",task,
-                            "evidence",evidenceMessage,"max_tokens",outputBudget)).retrieve().body(Map.class);
+            Map<String,Object> body=new LinkedHashMap<>();
+            body.put("system_prompt",promptTemplate.systemTemplate());body.put("user_prompt",task);
+            body.put("evidence",evidenceMessage);body.put("max_tokens",outputBudget);
+            if(provider.override()!=null)body.put("provider_override",provider.override());
+            RestClient.RequestBodySpec request=ai.post().uri("/api/v1/generate").contentType(MediaType.APPLICATION_JSON);
+            if(provider.override()!=null)request.header("X-AI-Internal-Token",aiInternalToken);
+            Map<String,Object> response=request.body(body).retrieve().body(Map.class);
             GenerationResult parsed=parseGeneration(String.valueOf(response.get("text")),evidence.size());
             return new GenerationResult(parsed.answer(),parsed.assessments(),number(response.get("input_tokens")),
                     number(response.get("output_tokens")),false,null,parsed.structuredOutputValid());
@@ -423,26 +478,37 @@ public class ResearchService {
         return capability+"_"+error.getClass().getSimpleName().replaceAll("([a-z])([A-Z])","$1_$2").toUpperCase();
     }
 
-    private void recordGenerationMetric(Provider provider,GenerationResult generated,long latencyMs){
-        BigDecimal cost=estimatedGenerationCost(generated.inputTokens(),generated.outputTokens());
+    private void recordGenerationMetric(Provider provider,GenerationResult generated,long latencyMs,
+                                        UUID actorUserId,UUID queryRunId){
+        BigDecimal cost=estimatedGenerationCost(provider.parametersJson(),generated.inputTokens(),generated.outputTokens());
         recordProviderMetric("RAG_GENERATION",provider.name(),provider.model(),
                 generated.failed()?"FAILED":"SUCCEEDED",latencyMs,generated.inputTokens(),
-                generated.outputTokens(),generated.errorCode(),cost);
+                generated.outputTokens(),generated.errorCode(),cost,provider.connectionId(),
+                actorUserId,queryRunId,provider.scope());
     }
 
     private void recordProviderMetric(String capability,String provider,String model,String status,
-                                      long latencyMs,int inputTokens,int outputTokens,String errorCode,
-                                      BigDecimal cost){
+                                       long latencyMs,int inputTokens,int outputTokens,String errorCode,
+                                       BigDecimal cost,UUID connectionId,UUID actorUserId,
+                                       UUID queryRunId,String credentialScope){
         try{
-            jdbc.update("insert into knowledge.provider_metric(capability,provider_name,model_name,status,latency_ms,input_tokens,output_tokens,estimated_cost,error_code) values(?,?,?,?,?,?,?,?,?)",
-                    capability,provider,model,status,latencyMs,inputTokens,outputTokens,cost,errorCode);
+            jdbc.update("""
+                insert into knowledge.provider_metric(
+                  capability,provider_name,model_name,status,latency_ms,input_tokens,output_tokens,
+                  estimated_cost,error_code,connection_id,actor_user_id,query_run_id,credential_scope)
+                values(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,capability,provider,model,status,latencyMs,inputTokens,outputTokens,cost,errorCode,
+                    connectionId,actorUserId,queryRunId,normalizeScope(credentialScope));
         }catch(Exception ignored){}
     }
 
     @SuppressWarnings("unchecked")
-    private BigDecimal estimatedGenerationCost(int inputTokens,int outputTokens){
+    private BigDecimal estimatedGenerationCost(String configuredParameters,int inputTokens,int outputTokens){
         try{
-            String raw=jdbc.queryForObject("select parameters::text from knowledge.provider_config where task_type='RAG_GENERATION'",String.class);
+            String raw=configuredParameters;
+            if(raw==null||raw.isBlank()||"{}".equals(raw)){
+                raw=jdbc.queryForObject("select parameters::text from knowledge.provider_config where task_type='RAG_GENERATION'",String.class);
+            }
             Map<String,Object> parameters=new ObjectMapper().readValue(raw==null?"{}":raw,Map.class);
             double inputRate=decimal(parameters.get("inputCostPerMillion"));
             double outputRate=decimal(parameters.get("outputCostPerMillion"));
@@ -524,10 +590,16 @@ public class ResearchService {
     private static int number(Object value){if(value instanceof Number number)return number.intValue();try{return Integer.parseInt(String.valueOf(value));}catch(Exception ignored){return 0;}}
     private static double decimal(Object value){if(value instanceof Number number)return number.doubleValue();try{return Double.parseDouble(String.valueOf(value));}catch(Exception ignored){return 0;}}
     private static String text(Object value,String fallback){return value==null?fallback:String.valueOf(value);}
+    private static String normalizeScope(String value){
+        String normalized=value==null?"ENVIRONMENT":value.toUpperCase(Locale.ROOT);
+        return Set.of("PLATFORM","USER","ENVIRONMENT","FALLBACK").contains(normalized)
+                ?normalized:"ENVIRONMENT";
+    }
     private static String json(Object value){try{return new ObjectMapper().writeValueAsString(value);}catch(Exception ignored){return "{}";}}
     @SuppressWarnings("unchecked")
     private static Map<String,Object> jsonMap(Object value){try{return value==null?Map.of():new ObjectMapper().readValue(String.valueOf(value),Map.class);}catch(Exception ignored){return Map.of();}}
-    private record Provider(String name,String model,boolean real){}
+    private record Provider(String name,String model,boolean real,UUID connectionId,String scope,
+                            Map<String,Object> override,String parametersJson){}
     private record GenerationResult(String answer,Map<Integer,EvidenceAssessmentPolicy.ModelAssessment> assessments,
                                     int inputTokens,int outputTokens,boolean failed,String errorCode,
                                     boolean structuredOutputValid){}

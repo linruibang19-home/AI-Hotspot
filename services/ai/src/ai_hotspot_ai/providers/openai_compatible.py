@@ -11,7 +11,9 @@ class OpenAICompatibleGenerationProvider(GenerationProvider):
         api_key: str,
         model: str,
         policy: ProviderPolicy,
+        provider_name: str = "openai-compatible",
     ) -> None:
+        self.name = provider_name
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model

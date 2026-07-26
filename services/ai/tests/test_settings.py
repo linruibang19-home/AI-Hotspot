@@ -21,6 +21,7 @@ def production_settings(**overrides: object) -> Settings:
         "rabbitmq_url": "amqp://app:strong-rabbit-password@rabbitmq:5672/prod",
         "minio_access_key": "production-app",
         "minio_secret_key": "strong-minio-password-2026",
+        "ai_internal_api_token": "strong-ai-internal-token-for-production-2026",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)

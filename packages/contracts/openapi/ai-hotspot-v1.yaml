@@ -983,6 +983,80 @@ paths:
             schema: { $ref: "#/components/schemas/AiProviderConfigRequest" }
       responses:
         "200": { description: Provider 配置已更新 }
+  /api/v1/admin/ai/connections:
+    get:
+      tags: [AiAdmin]
+      operationId: listAiProviderConnections
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 不含密钥明文的平台 Provider 连接, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+    post:
+      tags: [AiAdmin]
+      operationId: createAiProviderConnection
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenericObject" }
+      responses:
+        "200": { description: API Key 已加密保存，响应不返回明文, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/ai/connections/{connectionId}:
+    put:
+      tags: [AiAdmin]
+      operationId: updateAiProviderConnection
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: connectionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenericObject" }
+      responses:
+        "200": { description: Provider 连接已更新, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/ai/connections/{connectionId}/test:
+    post:
+      tags: [AiAdmin]
+      operationId: testAiProviderConnection
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: connectionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      responses:
+        "200": { description: 真实 Provider 连通性测试结果, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/ai/connections/{connectionId}/status:
+    post:
+      tags: [AiAdmin]
+      operationId: setAiProviderConnectionStatus
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: connectionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenericObject" }
+      responses:
+        "200": { description: Provider 连接状态已更新, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/admin/ai/connections/{connectionId}/assign:
+    post:
+      tags: [AiAdmin]
+      operationId: assignAiProviderConnection
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: connectionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenericObject" }
+      responses:
+        "200": { description: Provider 连接已绑定到指定 AI 能力, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
   /api/v1/admin/ai/reindex:
     post:
       tags: [AiAdmin]

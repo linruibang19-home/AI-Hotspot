@@ -11,7 +11,9 @@ class RemoteEmbeddingProvider(EmbeddingProvider):
         api_key: str | None,
         model: str,
         policy: ProviderPolicy,
+        provider_name: str = "remote",
     ) -> None:
+        self.name = provider_name
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
@@ -48,7 +50,9 @@ class RemoteRerankProvider(RerankProvider):
         api_key: str | None,
         model: str,
         policy: ProviderPolicy,
+        provider_name: str = "remote",
     ) -> None:
+        self.name = provider_name
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model

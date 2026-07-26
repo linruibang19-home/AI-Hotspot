@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import secrets
 from uuid import uuid4
 
 import uvicorn
@@ -7,6 +8,11 @@ from fastapi.responses import JSONResponse
 
 from . import __version__
 from .providers import ProviderRegistry, get_provider_registry
+from .providers.factory import (
+    build_embedding_override,
+    build_generation_override,
+    build_rerank_override,
+)
 from .providers.resilience import ProviderError
 from .schemas import (
     EmbeddingRequest,
@@ -79,6 +85,17 @@ def _providers(request: Request) -> ProviderRegistry:
     return request.app.state.providers
 
 
+def _allow_override(request: Request, override: object | None) -> None:
+    if override is None:
+        return
+    expected = _settings(request).ai_internal_api_token
+    supplied = request.headers.get("x-ai-internal-token", "")
+    if not supplied or not secrets.compare_digest(supplied, expected):
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail="Dynamic provider override is internal-only")
+
+
 @app.get("/health")
 async def health(request: Request):
     settings = _settings(request)
@@ -104,7 +121,12 @@ async def providers(request: Request):
 @app.post("/api/v1/generate", response_model=GenerateResponse)
 @app.post("/api/v1/mock/generate", response_model=GenerateResponse, include_in_schema=False)
 async def generate(payload: GenerateRequest, request: Request):
-    provider = _providers(request).generation
+    _allow_override(request, payload.provider_override)
+    provider = (
+        build_generation_override(payload.provider_override)
+        if payload.provider_override
+        else _providers(request).generation
+    )
     output = await provider.generate_with_usage(
         payload.user_prompt or payload.prompt or "",
         payload.max_tokens,
@@ -123,7 +145,12 @@ async def generate(payload: GenerateRequest, request: Request):
 @app.post("/api/v1/embed", response_model=EmbeddingResponse)
 @app.post("/api/v1/mock/embed", response_model=EmbeddingResponse, include_in_schema=False)
 async def embed(payload: EmbeddingRequest, request: Request):
-    provider = _providers(request).embedding
+    _allow_override(request, payload.provider_override)
+    provider = (
+        build_embedding_override(payload.provider_override)
+        if payload.provider_override
+        else _providers(request).embedding
+    )
     return EmbeddingResponse(
         vectors=await provider.embed(payload.texts),
         provider=provider.name,
@@ -134,7 +161,12 @@ async def embed(payload: EmbeddingRequest, request: Request):
 @app.post("/api/v1/rerank", response_model=RerankResponse)
 @app.post("/api/v1/mock/rerank", response_model=RerankResponse, include_in_schema=False)
 async def rerank(payload: RerankRequest, request: Request):
-    provider = _providers(request).rerank
+    _allow_override(request, payload.provider_override)
+    provider = (
+        build_rerank_override(payload.provider_override)
+        if payload.provider_override
+        else _providers(request).rerank
+    )
     documents = [(document.id, document.text) for document in payload.documents]
     results = await provider.rerank(payload.query, documents, payload.top_n)
     return RerankResponse(

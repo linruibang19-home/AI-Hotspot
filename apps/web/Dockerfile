@@ -13,13 +13,7 @@ RUN pnpm --filter @ai-hotspot/web lint \
     && pnpm --filter @ai-hotspot/web typecheck \
     && pnpm --filter @ai-hotspot/web test
 
-FROM node:22-bookworm-slim AS build
-ENV PNPM_HOME=/pnpm
-ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable
-WORKDIR /workspace
-COPY --from=dependencies /workspace/node_modules ./node_modules
-COPY --from=dependencies /workspace/apps/web/node_modules ./apps/web/node_modules
+FROM dependencies AS build
 COPY . .
 RUN pnpm --filter @ai-hotspot/web build
 

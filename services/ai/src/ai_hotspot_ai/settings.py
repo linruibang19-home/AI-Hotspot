@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     rerank_read_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
     rerank_total_timeout_seconds: float = Field(default=20.0, gt=0, le=180)
     provider_retry_attempts: int = Field(default=1, ge=0, le=1)
+    ai_internal_api_token: str = "ai-hotspot-local-internal-token"
 
     database_url: str = "postgresql+psycopg://ai_hotspot:ai_hotspot@localhost:5432/ai_hotspot"
     redis_url: str = "redis://localhost:6379/0"
@@ -62,6 +63,11 @@ class Settings(BaseSettings):
             return self
 
         violations: list[str] = []
+        if (
+            len(self.ai_internal_api_token.strip()) < 32
+            or self.ai_internal_api_token == "ai-hotspot-local-internal-token"
+        ):
+            violations.append("AI_INTERNAL_API_TOKEN must be replaced with a strong value")
         self._require_real_provider(
             violations,
             "GENERATION",

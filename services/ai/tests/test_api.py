@@ -72,6 +72,28 @@ async def test_mock_rerank_orders_by_overlap() -> None:
     assert response.json()["results"][0]["id"] == "relevant"
 
 
+async def test_dynamic_provider_override_requires_internal_token() -> None:
+    response = await request(
+        "POST",
+        "/api/v1/generate",
+        json={
+            "prompt": "hello",
+            "provider_override": {
+                "provider_name": "custom",
+                "api_protocol": "OPENAI_COMPATIBLE",
+                "base_url": "https://provider.example.com/v1",
+                "api_key": "secret-key-value",
+                "model": "example-model",
+                "timeout_ms": 5000,
+                "retry_attempts": 0,
+            },
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Dynamic provider override is internal-only"
+
+
 def test_every_worker_queue_has_a_routing_key() -> None:
     assert set(QUEUES) == set(ROUTING_KEYS)
     assert ROUTING_KEYS["q.content.worker"] == "content.processing.#"

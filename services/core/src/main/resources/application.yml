@@ -116,6 +116,8 @@ ai-hotspot:
     enabled: ${SOURCE_CATALOG_ENABLED:false}
     owner-email: ${SOURCE_CATALOG_OWNER_EMAIL:${BOOTSTRAP_ADMIN_EMAIL:}}
   security:
+    model-credential-master-key: ${MODEL_CREDENTIAL_MASTER_KEY:local-development-model-credential-master-key}
+    ai-internal-token: ${AI_INTERNAL_API_TOKEN:ai-hotspot-local-internal-token}
     login-max-failures: ${LOGIN_MAX_FAILURES:5}
     login-window-seconds: ${LOGIN_WINDOW_SECONDS:900}
     invitation-max-attempts: ${INVITATION_MAX_ATTEMPTS:10}
