@@ -140,11 +140,18 @@ test("research restores every turn and does not overstate evidence verification"
   const styles = readFileSync("src/app/styles/public-product.css", "utf8");
   assert.match(workspaces, /setSessionTurns\(view\.turns\)/);
   assert.match(workspaces, /本研究共 \{sessionTurns\.length\} 轮/);
+  assert.match(workspaces, /历史对话/);
+  assert.match(workspaces, /session\.latestQuestion\|\|session\.title/);
+  assert.match(workspaces, /research-history-turns/);
+  assert.match(workspaces, /research-chat-scroll/);
+  assert.match(workspaces, /parseAnswerBlocks/);
   assert.match(workspaces, /timeRangeLabel/);
   assert.match(workspaces, /sourceCount<2/);
   assert.match(workspaces, /证据有限/);
   assert.match(workspaces, /当前证据不足以完成交叉验证/);
   assert.match(styles, /\.research-turns/);
+  assert.match(styles, /\.research-chat-scroll/);
+  assert.match(styles, /\.research-answer \.answer-lead/);
   assert.match(styles, /\.evidence-limit-banner/);
 });
 
