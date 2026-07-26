@@ -39,7 +39,7 @@ BYOK-01 已在本地 Docker Compose 环境完成代码、数据库、接口、�
 
 ## 4. 自动化与真实验收证据
 
-- Core：57 项测试通过，包含公网地址分类和 development/production 地址策略；
+- Core：63 项测试通过，包含公网地址分类、development/production 地址策略、失败关闭、显式平台回落、每日/每月配额和单用户并发门禁；
 - Web：24 项测试、TypeScript、ESLint、Next.js 生产构建通过，`/settings/models` 已进入生产路由；
 - 契约：OpenAPI 漂移检查通过，共 106 个操作；
 - Docker：10 个 Compose 服务运行；Core、Web、AI API 与声明健康检查的基础设施均正常；
@@ -47,6 +47,8 @@ BYOK-01 已在本地 Docker Compose 环境完成代码、数据库、接口、�
 - fail-closed HTTP：创建默认关闭回落的未烟测连接后，RAG 在检索前返回 `503 USER_PROVIDER_UNAVAILABLE`，响应未泄漏密钥；
 - 真实路由：用户 Key 烟测通过并启用后，RAG 返回 `SUCCEEDED`、5 条数据库真实来源引用、引用覆盖率 0.8571；
 - 用量：真实 Generation 记录为 `credential_scope=USER`，输入 2,111、输出 864，共 2,975 Token；
+- 双用户黑盒：脚本 `scripts/Test-BYOK-Security.ps1` 创建两个独立 USER，非所有者对连接执行更新、烟测、启停和撤销均得到统一 `404 BYOK_CONNECTION_NOT_FOUND`；所有者的未启用连接在检索前返回 `503 USER_PROVIDER_UNAVAILABLE`；
+- 脱敏与撤销：创建响应和审计响应不含原始 Key、密文、nonce、指纹或 `apiKey` 字段；带 URL 密钥的 Endpoint 返回 `422 BYOK_ENDPOINT_BLOCKED`；撤销后数据库连接记录为 0；
 - 清理：验收连接和密文已撤销，当前 `scope=USER AND display_name LIKE 'Codex BYOK%'` 为 0；历史指标保留审计。
 
 真实验收首次发现用户 Generation 烟测请求 32 tokens，而 AI API 合同下限是 64，导致 422。已将烟测统一为 64 并通过重建复测，防止页面出现“配置正确但永远不能启用”的业务故障。
@@ -55,5 +57,4 @@ BYOK-01 已在本地 Docker Compose 环境完成代码、数据库、接口、�
 
 1. 目标 Linux 环境的真实多用户并发、Redis 故障和长时间运行压测；
 2. 各厂商实际计费单价与账单对账；未配置单价时界面保持“待配置单价”；
-3. 生产密钥轮换、HTTPS、真实 SMTP、异机恢复和内容合规，继续由上线 P1 任务负责；
-4. 普通用户跨账号攻击应在生产前用独立测试账号再做一次黑盒回归；当前服务端所有权条件和统一 404 已实现，但本轮真实 HTTP 使用管理员账号的普通用户权限完成。
+3. 生产密钥轮换、HTTPS、真实 SMTP、异机恢复和内容合规，继续由上线 P1 任务负责。
