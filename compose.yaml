@@ -227,6 +227,7 @@ services:
       SOURCE_CATALOG_OWNER_EMAIL: ${SOURCE_CATALOG_OWNER_EMAIL:-admin@aihotspot.local}
       MODEL_CREDENTIAL_MASTER_KEY: ${MODEL_CREDENTIAL_MASTER_KEY:-local-development-model-credential-master-key}
       AI_INTERNAL_API_TOKEN: ${AI_INTERNAL_API_TOKEN:-ai-hotspot-local-internal-token}
+      RAG_REQUIRE_USER_KEY: ${RAG_REQUIRE_USER_KEY:-false}
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:

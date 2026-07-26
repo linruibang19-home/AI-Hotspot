@@ -21,8 +21,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class KnowledgeController {
     private final ResearchService research;
     private final ResearchFeedbackService feedback;
-    public KnowledgeController(ResearchService research,ResearchFeedbackService feedback){
-        this.research=research;this.feedback=feedback;
+    private final UserProviderConnectionService userProviders;
+    public KnowledgeController(ResearchService research,ResearchFeedbackService feedback,
+                               UserProviderConnectionService userProviders){
+        this.research=research;this.feedback=feedback;this.userProviders=userProviders;
     }
     @GetMapping("/sessions") public List<ResearchService.ResearchSessionSummary> sessions(@AuthenticationPrincipal AppUserPrincipal user){return research.sessions(user.id());}
     @GetMapping("/sessions/{sessionId}") public ResearchService.ResearchSessionView session(
@@ -30,7 +32,9 @@ public class KnowledgeController {
         return research.session(user.id(),sessionId);
     }
     @PostMapping("/query") public ResearchService.ResearchResult query(@Valid @RequestBody QueryRequest request,@AuthenticationPrincipal AppUserPrincipal user){
-        return research.ask(user,request.sessionId(),request.question(),request.filters()==null?Map.of():request.filters());
+        try (var permit = userProviders.acquireRagPermit(user.id())) {
+            return research.ask(user,request.sessionId(),request.question(),request.filters()==null?Map.of():request.filters());
+        }
     }
     @PostMapping("/runs/{runId}/feedback")
     public ResearchFeedbackService.Feedback feedback(

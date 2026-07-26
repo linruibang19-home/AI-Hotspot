@@ -1,7 +1,7 @@
 package com.aihotspot.core.knowledge;
 
 import com.aihotspot.core.auth.AppUserPrincipal;
-import java.net.URI;
+import com.aihotspot.core.api.ApiException;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,20 +24,23 @@ public class ProviderConnectionService {
     private static final Set<String> PROTOCOLS = Set.of("OPENAI_COMPATIBLE", "SILICONFLOW");
     private final JdbcTemplate jdbc;
     private final ProviderCredentialCipher cipher;
+    private final ProviderEndpointPolicy endpointPolicy;
     private final RestClient ai;
     private final String internalToken;
-    private final String environment;
+    private final boolean ragRequireUserKey;
 
     public ProviderConnectionService(
             JdbcTemplate jdbc,
             ProviderCredentialCipher cipher,
+            ProviderEndpointPolicy endpointPolicy,
             @Value("${ai-hotspot.ai-base-url}") String aiBaseUrl,
             @Value("${ai-hotspot.security.ai-internal-token:ai-hotspot-local-internal-token}") String internalToken,
-            @Value("${ai-hotspot.environment}") String environment) {
+            @Value("${ai-hotspot.security.rag-require-user-key:false}") boolean ragRequireUserKey) {
         this.jdbc = jdbc;
         this.cipher = cipher;
+        this.endpointPolicy = endpointPolicy;
         this.internalToken = internalToken;
-        this.environment = environment;
+        this.ragRequireUserKey = ragRequireUserKey;
         this.ai = RestClient.builder().baseUrl(aiBaseUrl).build();
     }
 
@@ -250,34 +254,56 @@ public class ProviderConnectionService {
     }
 
     public RuntimeSelection selection(String taskType, UUID ownerUserId) {
+        if (ownerUserId != null) {
+            List<UserRoute> userRoutes = jdbc.query("""
+                select connection.id,connection.scope,connection.vendor,connection.api_protocol,
+                  connection.base_url,connection.credential_kind,connection.credential_ref,
+                  connection.credential_ciphertext,connection.credential_nonce,connection.capabilities,
+                  assignment.model_name,assignment.timeout_ms,assignment.parameters::text,
+                  assignment.status assignment_status,connection.status connection_status,
+                  assignment.platform_fallback_enabled
+                from knowledge.user_provider_assignment assignment
+                join knowledge.provider_connection connection on connection.id=assignment.connection_id
+                where assignment.user_id=? and assignment.task_type=? and connection.scope='USER'
+                  and connection.owner_user_id=assignment.user_id
+                """, (rs, row) -> new UserRoute(new ConnectionSecret(
+                    rs.getObject("id", UUID.class), rs.getString("scope"), rs.getString("vendor"),
+                    rs.getString("api_protocol"), rs.getString("base_url"),
+                    rs.getString("credential_kind"), rs.getString("credential_ref"),
+                    rs.getString("credential_ciphertext"), rs.getString("credential_nonce"),
+                    rs.getArray("capabilities") == null ? List.of()
+                            : List.of((String[]) rs.getArray("capabilities").getArray()),
+                    rs.getString("model_name"), rs.getInt("timeout_ms"),
+                    rs.getString("parameters")),
+                    rs.getString("assignment_status"), rs.getString("connection_status"),
+                    rs.getBoolean("platform_fallback_enabled")), ownerUserId, taskType);
+            if (!userRoutes.isEmpty()) {
+                UserRoute route = userRoutes.get(0);
+                if ("ACTIVE".equals(route.assignmentStatus()) && "ACTIVE".equals(route.connectionStatus())) {
+                    return runtime(route.connection(), taskType);
+                }
+                if (!route.platformFallbackEnabled()) {
+                    throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "USER_PROVIDER_UNAVAILABLE",
+                            "你的模型连接当前不可用；平台 Key 回落未开启");
+                }
+            } else if (ragRequireUserKey && "RAG_GENERATION".equals(taskType)) {
+                throw new ApiException(HttpStatus.PRECONDITION_REQUIRED, "USER_PROVIDER_REQUIRED",
+                        "当前站点要求先配置个人模型 API Key");
+            }
+        }
+        return platformSelection(taskType);
+    }
+
+    private RuntimeSelection platformSelection(String taskType) {
         List<ConnectionSecret> rows = jdbc.query("""
-            select route.id,route.scope,route.vendor,route.api_protocol,route.base_url,
-              route.credential_kind,route.credential_ref,route.credential_ciphertext,
-              route.credential_nonce,route.capabilities,route.model_name,route.timeout_ms,
-              route.parameters
-            from (
-              select connection.id,connection.scope,connection.vendor,connection.api_protocol,
-                connection.base_url,connection.credential_kind,connection.credential_ref,
-                connection.credential_ciphertext,connection.credential_nonce,connection.capabilities,
-                assignment.model_name,assignment.timeout_ms,assignment.parameters::text,
-                0 as route_priority
-              from knowledge.user_provider_assignment assignment
-              join knowledge.provider_connection connection on connection.id=assignment.connection_id
-              where assignment.user_id=? and assignment.task_type=? and assignment.status='ACTIVE'
-                and connection.status='ACTIVE' and connection.scope='USER'
-                and connection.owner_user_id=assignment.user_id
-              union all
-              select connection.id,connection.scope,connection.vendor,connection.api_protocol,
-                connection.base_url,connection.credential_kind,connection.credential_ref,
-                connection.credential_ciphertext,connection.credential_nonce,connection.capabilities,
-                config.model_name,config.timeout_ms,config.parameters::text,
-                1 as route_priority
-              from knowledge.provider_config config
-              join knowledge.provider_connection connection on connection.id=config.connection_id
-              where config.task_type=? and config.status='ACTIVE' and connection.status='ACTIVE'
-                and connection.scope='PLATFORM'
-            ) route
-            order by route.route_priority
+            select connection.id,connection.scope,connection.vendor,connection.api_protocol,
+              connection.base_url,connection.credential_kind,connection.credential_ref,
+              connection.credential_ciphertext,connection.credential_nonce,connection.capabilities,
+              config.model_name,config.timeout_ms,config.parameters::text
+            from knowledge.provider_config config
+            join knowledge.provider_connection connection on connection.id=config.connection_id
+            where config.task_type=? and config.status='ACTIVE' and connection.status='ACTIVE'
+              and connection.scope='PLATFORM'
             limit 1
             """, (rs, row) -> new ConnectionSecret(
                 rs.getObject("id", UUID.class), rs.getString("scope"), rs.getString("vendor"),
@@ -287,9 +313,12 @@ public class ProviderConnectionService {
                 rs.getArray("capabilities") == null ? List.of()
                         : List.of((String[]) rs.getArray("capabilities").getArray()),
                 rs.getString("model_name"), rs.getInt("timeout_ms"),
-                rs.getString("parameters")), ownerUserId, taskType, taskType);
+                rs.getString("parameters")), taskType);
         if (rows.isEmpty()) return RuntimeSelection.environment();
-        ConnectionSecret connection = rows.get(0);
+        return runtime(rows.get(0), taskType);
+    }
+
+    private RuntimeSelection runtime(ConnectionSecret connection, String taskType) {
         if ("ENVIRONMENT".equals(connection.credentialKind())) {
             return new RuntimeSelection(connection.id(), connection.scope(), connection.vendor(),
                     connection.modelName(), null, connection.parametersJson());
@@ -344,7 +373,7 @@ public class ProviderConnectionService {
         String vendor = request.vendor() == null ? "" : request.vendor().strip().toLowerCase(Locale.ROOT);
         String protocol = request.apiProtocol() == null ? "OPENAI_COMPATIBLE"
                 : request.apiProtocol().strip().toUpperCase(Locale.ROOT);
-        String baseUrl = request.baseUrl() == null ? "" : request.baseUrl().strip().replaceAll("/+$", "");
+        String baseUrl = endpointPolicy.validate(request.baseUrl(), false);
         List<String> capabilities = request.capabilities() == null ? List.of()
                 : request.capabilities().stream().map(value -> value.strip().toUpperCase(Locale.ROOT))
                     .distinct().toList();
@@ -356,22 +385,7 @@ public class ProviderConnectionService {
         if (capabilities.isEmpty() || capabilities.stream().anyMatch(value -> !CAPABILITIES.contains(value))) {
             throw new IllegalArgumentException("至少选择一项有效能力");
         }
-        validateBaseUrl(baseUrl);
         return new ValidatedConnection(displayName, vendor, protocol, baseUrl, capabilities);
-    }
-
-    private void validateBaseUrl(String baseUrl) {
-        try {
-            URI uri = URI.create(baseUrl);
-            boolean localDevelopment = !"production".equalsIgnoreCase(environment)
-                    && ("localhost".equalsIgnoreCase(uri.getHost()) || "127.0.0.1".equals(uri.getHost()));
-            if (uri.getHost() == null || (!"https".equalsIgnoreCase(uri.getScheme()) && !localDevelopment)
-                    || uri.getUserInfo() != null || uri.getFragment() != null) {
-                throw new IllegalArgumentException("服务地址必须是无凭据、无片段的 HTTPS URL");
-            }
-        } catch (IllegalArgumentException error) {
-            throw new IllegalArgumentException("服务地址必须是有效的 HTTPS URL");
-        }
     }
 
     private static String defaultModel(String vendor, String capability) {
@@ -398,6 +412,8 @@ public class ProviderConnectionService {
                                     String baseUrl, String credentialKind, String credentialRef,
                                     String ciphertext, String nonce, List<String> capabilities,
                                     String modelName, int timeoutMs, String parametersJson) {}
+    private record UserRoute(ConnectionSecret connection, String assignmentStatus,
+                             String connectionStatus, boolean platformFallbackEnabled) {}
 
     public record SaveConnection(String displayName, String vendor, String apiProtocol,
                                  String baseUrl, String apiKey, List<String> capabilities) {}

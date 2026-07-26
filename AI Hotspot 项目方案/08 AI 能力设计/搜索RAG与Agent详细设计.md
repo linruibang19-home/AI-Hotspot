@@ -76,7 +76,7 @@ AGENT-01 将上述原则落实到当前单步状态机。运行记录先独立�
 
 管理端“模型接入与 RAG 运行中心”拆成三个任务页签：模型接入负责厂商连接、烟测和任务路由；RAG 监控负责延迟、Token、错误、证据和慢查询；质量评测负责黄金集、真实失败反馈与发布门禁。平台连接支持环境变量引用或 AES-GCM 加密凭据，任何 API 都不返回原始密钥、密文、nonce 或指纹。动态连接只允许 Core 使用内部令牌传给 AI API，浏览器客户端不能直接提交 Provider 覆盖。
 
-V045 为未来用户 BYOK 建立独立 `provider_connection.owner_user_id` 与 `user_provider_assignment`。每个任务运行时先选择当前用户已启用的私有路由，否则回落到平台路由；`provider_metric` 同时记录连接、使用者、查询运行和凭据归属，因此能分别统计“平台 Token”和“用户 Token”。当前用户表无数据，用户 CRUD、配额、撤销和滥用防护完成前不开放入口。
+V045 建立独立 `provider_connection.owner_user_id` 与 `user_provider_assignment`，V046 完成用户 BYOK 产品入口。登录用户可为 Generation、Embedding、Rerank 分别配置自己的连接；每个连接默认停用，必须以该用户密钥通过真实烟测才能启用。任务运行优先选择当前用户已启用的私有路由；连接不存在时可按站点策略使用平台能力，连接存在但不可用时默认 fail-closed，只有用户显式开启平台回落才允许消耗站点 Token。`provider_metric` 记录连接、使用者、查询运行和 `PLATFORM/USER` 凭据归属；每日查询、每月 Token 和单用户并发门禁在检索前执行。
 
 RAG-04 将监控按运营决策分层：顶部展示查询量、总延迟 P95、引用覆盖、Provider 错误率和成本状态；中层展示 Embedding、混合召回、Rerank、Generation 的均值/P95及小时趋势；下层展示 Provider 调用/Token、无证据原因、索引护栏、慢查询样本和可筛选评测历史。观察窗口统一支持 24/72/168 小时，卡片、趋势和明细使用相同时间边界。
 

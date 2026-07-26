@@ -964,6 +964,81 @@ paths:
       responses:
         "200": { description: M10 发布就绪门禁及逐项证据, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/me/ai/connections:
+    get:
+      tags: [AiUser]
+      operationId: listMyAiProviderConnections
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 当前用户的私有 Provider 连接，不返回密钥明文, content: { application/json: { schema: { $ref: "#/components/schemas/GenericList" } } } }
+    post:
+      tags: [AiUser]
+      operationId: createMyAiProviderConnection
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfHeader" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenericObject" }
+      responses:
+        "200": { description: 用户 API Key 已加密保存且连接默认停用, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/me/ai/usage:
+    get:
+      tags: [AiUser]
+      operationId: getMyAiProviderUsage
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: 当前用户查询、Token、调用和额度摘要, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/me/ai/connections/{connectionId}:
+    put:
+      tags: [AiUser]
+      operationId: updateMyAiProviderConnection
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: connectionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenericObject" }
+      responses:
+        "200": { description: 私有 Provider 连接已更新并停用等待复测, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+    delete:
+      tags: [AiUser]
+      operationId: revokeMyAiProviderConnection
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: connectionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      responses:
+        "200": { description: 私有 Provider 连接及路由已撤销 }
+  /api/v1/me/ai/connections/{connectionId}/test:
+    post:
+      tags: [AiUser]
+      operationId: testMyAiProviderConnection
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: connectionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      responses:
+        "200": { description: 以用户密钥执行的真实连通性测试结果, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
+  /api/v1/me/ai/connections/{connectionId}/status:
+    put:
+      tags: [AiUser]
+      operationId: setMyAiProviderConnectionStatus
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: connectionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/CsrfHeader" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenericObject" }
+      responses:
+        "200": { description: 已通过烟测的连接被启用或现有连接被停用, content: { application/json: { schema: { $ref: "#/components/schemas/GenericObject" } } } }
   /api/v1/admin/ai/configs:
     get:
       tags: [AiAdmin]

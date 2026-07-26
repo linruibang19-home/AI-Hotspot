@@ -135,6 +135,19 @@ test("M7-M10 workspaces use real APIs and expose governance", () => {
   assert.doesNotMatch(workspaces, /Mock 质量分析/);
 });
 
+test("personal model settings expose private BYOK lifecycle and explicit fallback consent", () => {
+  const page = readFileSync("src/app/settings/models/page.tsx", "utf8");
+  const navigation = readFileSync("src/lib/navigation.ts", "utf8");
+  assert.match(page, /\/me\/ai\/connections/);
+  assert.match(page, /\/me\/ai\/usage/);
+  assert.match(page, /真实烟测/);
+  assert.match(page, /type="password"/);
+  assert.match(page, /个人连接不可用时允许平台回落/);
+  assert.match(page, /仅接受可解析的公网 HTTPS 地址/);
+  assert.doesNotMatch(page, /localStorage|sessionStorage/);
+  assert.match(navigation, /href: "\/settings\/models".*access: "authenticated"/);
+});
+
 test("research restores every turn and does not overstate evidence verification", () => {
   const workspaces = readFileSync("src/components/product-workspaces.tsx", "utf8");
   const styles = readFileSync("src/app/styles/public-product.css", "utf8");

@@ -28,6 +28,7 @@ export const navigation: NavigationGroup[] = [
     items: [
       { href: "/subscriptions", label: "订阅与邮件", icon: "mail", access: "authenticated" },
       { href: "/research", label: "知识库问答", icon: "research", access: "authenticated" },
+      { href: "/settings/models", label: "我的模型", icon: "settings", access: "authenticated" },
       { href: "/agent", label: "Agent 工作台", icon: "agent", access: "authenticated" },
     ],
   },
